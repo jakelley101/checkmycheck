@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Film/TV Payroll Calculator — Totals Hours Hidden</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f5f5f7; padding: 20px; color: #1d1d1f; }
+    .container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); padding: 30px; }
+    .header-section { margin-bottom: 30px; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; font-size: 14px; font-weight: 600; color: #424245; margin-bottom: 6px; }
+    input, select { width: 100%; padding: 10px 12px; border: 1px solid #d1d1d6; border-radius: 8px; font-size: 16px; background: white; }
+    input:focus, select:focus { outline: none; border-color: #007aff; box-shadow: 0 0 0 3px rgba(0,122,255,0.1); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; align-items: end; }
+    .week-info { background: #f2f2f7; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .warning-text { color: #ff3b30; font-size: 12px; margin-top: 5px; }
+    .table-container { overflow-x: auto; margin: 10px 0; }
+    table { width: auto; border-collapse: collapse; font-size: 14px; min-width: 600px; }
+    table.expanded { min-width: 1200px; }
+    th, td { padding: 12px 8px; white-space: nowrap; }
+    th { background: #f2f2f7; text-align: left; font-weight: 600; color: #424245; border-bottom: 1px solid #d1d1d6; }
+    td { border-bottom: 1px solid #f2f2f7; text-align: center; }
+    .date-cell { text-align: left; font-weight: 500; color: #007aff; }
+    .time-input { width: 60px; padding: 6px; border: 1px solid #d1d1d6; border-radius: 4px; text-align: center; font-size: 13px; }
+    .checkbox { width: 16px; height: 16px; }
+    .calculated-cell { background: #f8f9fa; font-weight: 500; color: #1d1d1f; }
+    .totals-section { margin-top: 15px; background: #f8f9fa; padding: 20px; border-radius: 8px; }
+    .totals-table { width: auto; max-width: 500px; margin: 0; }
+    .totals-table th { background: none; padding: 12px; text-align: left; font-weight: 600; color: #424245; border-bottom: 2px solid #d1d1d6; }
+    .totals-table td { padding: 10px 12px; border-bottom: 1px solid #e5e5e7; }
+    .totals-table .category-label { font-weight: 500; color: #424245; text-align: left; }
+    .totals-table .hours-value { text-align: center; font-weight: 500; }
+    .totals-table .amount-value { text-align: right; font-weight: 500; }
+    .totals-table tr:last-child td { border-bottom: none; font-weight: 600; font-size: 16px; background: #e5e5e7; border-top: 2px solid #d1d1d6; }
+    .calculate-btn { background: #007aff; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin: 10px 0; transition: background-color 0.2s; }
+    .calculate-btn:hover { background: #0056b3; }
+    .hours-breakdown { display: inline-block; background: #f2f2f7; color: #007aff; border: 1px solid #007aff; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; margin: 10px 0; transition: all 0.2s; }
+    .hours-breakdown:hover { background: #007aff; color: white; }
+    .hours-breakdown.expanded { background: #007aff; color: white; }
+    .hidden-column { display: none; }
+      /* Idle row visual state */
+    tr.idle-row td { background: #f2f2f7; color: #8e8e93; }
+    tr.idle-row .date-cell { color: #8e8e93; }
+    .time-input:disabled { background: #ededf0; color: #8e8e93; cursor: not-allowed; }
+  .checkbox-inline{display:flex;align-items:center;gap:10px;}
+  .checkbox-inline input[type="checkbox"]{width:16px;height:16px;accent-color:#007aff;}
+  .checkbox-inline small{font-size:13px;color:#6e6e73;}
+  .switch-row{display:flex;align-items:center;gap:10px;padding-top:6px}
+  .switch-row input[type="checkbox"]{width:18px;height:18px;accent-color:#007aff}
+  .hint{font-size:13px;color:#6e6e73}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-section">
+      <div class="week-info">
+        <div class="form-group">
+          <label for="weekStart">Week Starting On</label>
+          <input type="date" id="weekStart" value="2025-01-05" />
+          <div class="warning-text">Changing the week start will reset your data</div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="hourlyRate">Hourly Rate ($)</label>
+          <input type="number" id="hourlyRate" step="0.01" placeholder="60.00" />
+        </div>
+        <div class="form-group">
+          <label for="guaranteedHours">Guaranteed Daily Hours</label>
+          <input type="number" id="guaranteedHours" step="0.1" placeholder="8.0" />
+        </div>
+        <div class="form-group">
+          <label for="agreement">Agreement</label>
+          <select id="agreement">
+            <option value="Basic" selected>Basic (IATSE)</option>
+            <option value="ASA">ASA</option>
+            <option value="LBTA">LBTA</option>
+            <option value="AICP">Commercials (AICP)</option>
+            <option value="CA">CA Non-Union</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="environment">Environment</label>
+          <select id="environment">
+            <option value="Location">Location</option>
+            <option value="Studio">Studio</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top: 10px;">
+        <details id="advancedOptions">
+          <summary style="cursor:pointer;font-weight:600;color:#424245">Advanced options</summary>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:12px;">
+            <div>
+              <label for="goldenHours">Golden Hours</label>
+              <div class="switch-row">
+                <input type="checkbox" id="goldenHours">
+                <span class="hint">3× after 15 (non‑AICP)</span>
+              </div>
+            </div>
+            <div>
+              <label for="otBasis">OT/MP Basis</label>
+              <select id="otBasis">
+                <option value="worked" selected>Worked</option>
+                <option value="elapsed">Elapsed (Call→Wrap)</option>
+              </select>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <button class="hours-breakdown" onclick="toggleHoursBreakdown()">
+        <span id="breakdown-text">Show Hours Breakdown</span>
+        <span id="breakdown-icon">+</span>
+      </button>
+    </div>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Idle?</th>
+            <th>Call</th>
+            <th>Lunch Out</th>
+            <th>Lunch In</th>
+            <th>Wrap</th>
+            <th class="breakdown-column hidden-column">Total Hours</th>
+            <th class="breakdown-column hidden-column">Regular</th>
+            <th class="breakdown-column hidden-column">Total OT</th>
+            <th class="breakdown-column hidden-column">1.5x OT</th>
+            <th class="breakdown-column hidden-column">2x OT</th>
+            <th class="breakdown-column hidden-column">2.5x OT</th>
+            <th class="breakdown-column hidden-column">3x OT</th>
+            <th class="breakdown-column hidden-column">AM MP</th>
+            <th class="breakdown-column hidden-column">PM MP</th>
+            <th class="breakdown-column hidden-column">AM MP Amount</th>
+            <th class="breakdown-column hidden-column">PM MP Amount</th>
+          </tr>
+        </thead>
+        <tbody id="timecardTable"></tbody>
+      </table>
+    </div>
+
+    <button class="calculate-btn" onclick="calculateTotals()">Calculate Totals</button>
+
+    <div class="totals-section">
+      <table class="totals-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th style="text-align: center;">Hours</th>
+            <th style="text-align: right;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="row-regular">
+            <td class="category-label">Regular</td>
+            <td class="hours-value" id="regularHoursTotal">0.0</td>
+            <td class="amount-value" id="regularAmount">$0.00</td>
+          </tr>
+          <tr id="row-ot15">
+            <td class="category-label">1.5x OT</td>
+            <td class="hours-value" id="overtimeHoursTotal">0.0</td>
+            <td class="amount-value" id="overtimeAmount">$0.00</td>
+          </tr>
+          <tr id="row-ot2x">
+            <td class="category-label">2x OT</td>
+            <td class="hours-value" id="doubleOvertimeHoursTotal">0.0</td>
+            <td class="amount-value" id="doubleOvertimeAmount">$0.00</td>
+          </tr>
+          <tr id="row-ot25">
+            <td class="category-label">2.5x OT</td>
+            <td class="hours-value" id="ot25HoursTotal">0.0</td>
+            <td class="amount-value" id="ot25Amount">$0.00</td>
+          </tr>
+          <tr id="row-ot3x">
+            <td class="category-label">3x OT</td>
+            <td class="hours-value" id="ot3xHoursTotal">0.0</td>
+            <td class="amount-value" id="ot3xAmount">$0.00</td>
+          </tr>
+          <tr id="row-idle">
+            <td class="category-label">Idle</td>
+            <td class="hours-value" id="idleTotal"></td> <!-- intentionally blank -->
+            <td class="amount-value" id="idleAmount">$0.00</td>
+          </tr>
+          <tr id="row-meals">
+            <td class="category-label">Meal Penalties</td>
+            <td class="hours-value" id="mealPenaltiesTotal"></td> <!-- intentionally blank -->
+            <td class="amount-value" id="mealPenaltiesAmount">$0.00</td>
+          </tr>
+          <tr id="row-sixth">
+            <td class="category-label">6th Day</td>
+            <td class="hours-value" id="sixthDayHours"></td> <!-- intentionally blank -->
+            <td class="amount-value" id="sixthDayAmount">$0.00</td>
+          </tr>
+          <tr id="row-seventh">
+            <td class="category-label">7th Day</td>
+            <td class="hours-value" id="seventhDayHours"></td> <!-- intentionally blank -->
+            <td class="amount-value" id="seventhDayAmount">$0.00</td>
+          </tr>
+          <tr>
+            <td class="category-label">Total</td>
+            <td class="hours-value" id="totalHours">0.0</td>
+            <td class="amount-value" id="totalAmount">$0.00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+  // ===== Constants =====
+  const IDLE_HOURS_PER_DAY = 8; // fixed display & pay logic for idle
+
+  // ===== Helpers =====
+  // OT Profiles (core bands). Golden Hours (3x after 15) can be toggled for non-AICP.
+  const OT_PROFILES = {
+    Basic: { bands: [ {limit:8, mult:1}, {limit:12, mult:1.5}, {limit:Infinity, mult:2} ], goldenAfter: 15, goldenMult: 3 },
+    ASA:   { bands: [ {limit:8, mult:1}, {limit:12, mult:1.5}, {limit:Infinity, mult:2} ], goldenAfter: 15, goldenMult: 3 },
+    LBTA:  { bands: [ {limit:8, mult:1}, {limit:12, mult:1.5}, {limit:Infinity, mult:2} ], goldenAfter: 15, goldenMult: 3 },
+    CA:    { bands: [ {limit:8, mult:1}, {limit:12, mult:1.5}, {limit:Infinity, mult:2} ], goldenAfter: null, goldenMult: null },
+    AICP:  { bands: [ {limit:8, mult:1}, {limit:12, mult:1.5}, {limit:15, mult:2}, {limit:Infinity, mult:2.5} ], goldenAfter: null, goldenMult: null }
+  };
+  function getSelectedOT() {
+    const agreement = (document.getElementById('agreement')?.value) || 'Basic';
+    const golden = !!document.getElementById('goldenHours')?.checked;
+    return { agreement, golden };
+  }
+  function applyGolden(bands, profile, golden) {
+    if (!golden || !profile.goldenAfter || profile === OT_PROFILES.AICP) return bands;
+    // Insert a 3x band after profile.goldenAfter
+    const res = [];
+    for (const b of bands) {
+      if (b.limit <= profile.goldenAfter) { res.push({...b}); }
+      else {
+        // first band that passes goldenAfter -> split
+        const pre = { limit: profile.goldenAfter, mult: b.mult };
+        const post = { limit: Infinity, mult: profile.goldenMult };
+        res.push(pre, post);
+        // after inserting, all further bands ignored as 3x dominates
+        return res;
+      }
+    }
+    // If loop finishes without crossing, add 3x tail
+    res.push({ limit: Infinity, mult: profile.goldenMult });
+    return res;
+  }
+  function multiplierFromProfile(hours, agreement, golden) {
+    const profile = OT_PROFILES[agreement] || OT_PROFILES.Basic;
+    const bands = applyGolden(profile.bands, profile, golden);
+    let prev = 0;
+    for (const b of bands) {
+      if (hours <= b.limit) return b.mult;
+      prev = b.limit;
+    }
+    return bands[bands.length-1].mult;
+  }
+  function allocateOTBuckets(totalHours, agreement, golden) {
+    // Allocate worked hours into bands using simple cutoffs (worked-based buckets for UI)
+    const profile = OT_PROFILES[agreement] || OT_PROFILES.Basic;
+    const bands = applyGolden(profile.bands, profile, golden);
+    let remaining = totalHours;
+    let prev = 0;
+    const buckets = { regular:0, ot15:0, ot2:0, ot25:0, ot3:0 };
+    for (const b of bands) {
+      const span = Math.min(remaining, Math.max(0, b.limit - prev));
+      if (span > 0) {
+        if (b.mult === 1) buckets.regular += span;
+        else if (b.mult === 1.5) buckets.ot15 += span;
+        else if (b.mult === 2) buckets.ot2 += span;
+        else if (b.mult === 2.5) buckets.ot25 += span;
+        else if (b.mult === 3) buckets.ot3 += span;
+        remaining -= span;
+        prev = b.limit;
+      }
+      if (remaining <= 0) break;
+    }
+    if (remaining > 0) {
+      // anything beyond last band
+      const lastMult = bands[bands.length-1].mult;
+      if (lastMult === 1) buckets.regular += remaining;
+      else if (lastMult === 1.5) buckets.ot15 += remaining;
+      else if (lastMult === 2) buckets.ot2 += remaining;
+      else if (lastMult === 2.5) buckets.ot25 += remaining;
+      else if (lastMult === 3) buckets.ot3 += remaining;
+    }
+    return buckets;
+  }
+  function getEventMultiplier(workedAtEvent, elapsedAtEvent, workedNumber) {
+    const { agreement, golden } = getSelectedOT();
+    const basis = (document.getElementById('otBasis')?.value) || 'worked';
+    const basisHours = basis === 'elapsed' ? elapsedAtEvent : workedAtEvent;
+    if (workedNumber === 7) return 2; // 7th day: 2x all
+    if (workedNumber === 6) return basisHours <= 12 ? 1.5 : 2; // 6th day rule
+    return multiplierFromProfile(basisHours, agreement, golden);
+  }
+  function getMealPenaltyRate(agreement, environment, penaltyNumber) {
+    // Contract fixed-dollar schedule (pre-prevailing-rate)
+    const rateStructure = {
+      'Basic_Studio':   [8.5, 11.5, 13.5, 25],
+      'Basic_Location': [7.5, 10.0, 12.5, 25],
+      'ASA_Studio':     [8.5, 11.0, 13.5, 25],
+      'ASA_Location':   [7.5, 10.0, 12.5, 25],
+      'LBTA_Studio':    [7.5, 10.0, 12.5, 25],
+      'LBTA_Location':  [7.5, 10.0, 12.5, 25]
+    };
+    // Use Basic schedule as fallback for agreements we haven't modeled (e.g., AICP/CA)
+    const baseKey = ['Basic','ASA','LBTA'].includes(agreement) ? `${agreement}_${environment}` : `Basic_${environment}`;
+    const rates = rateStructure[baseKey] || [7.5, 10.0, 12.5, 25];
+    if (penaltyNumber <= 0) return 0;
+    if (penaltyNumber === 1) return rates[0]; // first
+    if (penaltyNumber === 2) return rates[1]; // second
+    if (penaltyNumber <= 4) return rates[2];  // third/fourth
+    return rates[3];                           // fifth+
+  }
+
+  function getMultiplierFromWorkedHours(workedHours) {
+    if (workedHours <= 8) return 1;
+    if (workedHours <= 12) return 1.5;
+    return 2;
+  }
+
+  function generateWeekDates(startDate) {
+    const dates = [];
+    const start = new Date(startDate);
+    start.setMinutes(start.getMinutes() + start.getTimezoneOffset()); // normalize
+    for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); dates.push(d); }
+    return dates;
+  }
+
+  function formatDate(date) {
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+  }
+
+  // ===== UI Setup =====
+  function initializeTable() {
+    const weekStart = document.getElementById('weekStart').value;
+    const dates = generateWeekDates(weekStart);
+    const tbody = document.getElementById('timecardTable');
+    tbody.innerHTML = '';
+
+    dates.forEach((date, index) => {
+      const row = document.createElement('tr');
+      row.setAttribute('id', `dayRow${index}`);
+      row.innerHTML = `
+        <td class="date-cell">${formatDate(date)}</td>
+        <td><input type="checkbox" class="checkbox" id="idle${index}"></td>
+        <td><input type="number" class="time-input" id="call${index}" step="0.1" placeholder="0.0"></td>
+        <td><input type="number" class="time-input" id="lunchOut${index}" step="0.1" placeholder="0.0"></td>
+        <td><input type="number" class="time-input" id="lunchIn${index}" step="0.1" placeholder="0.0"></td>
+        <td><input type="number" class="time-input" id="wrap${index}" step="0.1" placeholder="0.0"></td>
+        <td class="calculated-cell breakdown-column hidden-column" id="totalHours${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="regular${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="totalOT${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="ot15${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="ot2x${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="ot25${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="ot3x${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="amMP${index}">0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="pmMP${index}">0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="amMPAmount${index}">$0.00</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="pmMPAmount${index}">$0.00</td>
+      `;
+      tbody.appendChild(row);
+
+      // Input listeners -> recompute week (so prevailing-rate logic is accurate)
+      ['call','lunchOut','lunchIn','wrap'].forEach(field => {
+        document.getElementById(`${field}${index}`).addEventListener('input', recomputeAllDays);
+      });
+      document.getElementById(`idle${index}`).addEventListener('change', (e) => {
+        setIdleState(index, e.target.checked);
+        recomputeAllDays();
+      });
+
+      // Initialize the state for this row
+      setIdleState(index, document.getElementById(`idle${index}`).checked);
+    });
+  }
+
+  // Compute per-day metrics (hours, OT breakdown, and MP counts), without amounts
+  function computeDayMetrics(dayIndex) {
+    const call = parseFloat(document.getElementById(`call${dayIndex}`).value) || 0;
+    const lunchOut = parseFloat(document.getElementById(`lunchOut${dayIndex}`).value) || 0;
+    const lunchIn = parseFloat(document.getElementById(`lunchIn${dayIndex}`).value) || 0;
+    const wrap = parseFloat(document.getElementById(`wrap${dayIndex}`).value) || 0;
+    const isIdle = document.getElementById(`idle${dayIndex}`).checked;
+
+    let totalHours = 0, regularHours = 0, ot15Hours = 0, ot2xHours = 0, ot25Hours = 0, ot3xHours = 0, amMP = 0, pmMP = 0;
+
+    if (call && wrap && !isIdle) {
+      totalHours = wrap - call;
+      if (lunchOut && lunchIn) totalHours -= (lunchIn - lunchOut);
+
+      const { agreement, golden } = getSelectedOT();
+      const basis = (document.getElementById('otBasis')?.value) || 'worked';
+      const elapsedHours = wrap - call; // ignores lunch
+      const hoursForBuckets = basis === 'elapsed' ? elapsedHours : totalHours;
+      const buckets = allocateOTBuckets(hoursForBuckets, agreement, golden);
+      regularHours = buckets.regular;
+      ot15Hours = buckets.ot15;
+      ot2xHours = buckets.ot2;
+      ot25Hours = buckets.ot25;
+      ot3xHours = buckets.ot3;
+
+      // AM penalties: first meal later than 6 hrs after call
+      if (lunchOut && lunchIn) {
+        if (lunchOut - call > 6) amMP = Math.ceil((lunchOut - call - 6) * 2);
+        if (wrap - lunchIn > 6) pmMP = Math.ceil((wrap - lunchIn - 6) * 2);
+      } else {
+        if (wrap - call > 6) amMP = Math.ceil((wrap - call - 6) * 2);
+      }
+    }
+
+    // Update visible per-day hour cells now (amounts later after week calc)
+    document.getElementById(`totalHours${dayIndex}`).textContent = totalHours.toFixed(1);
+    document.getElementById(`regular${dayIndex}`).textContent = regularHours.toFixed(1);
+    document.getElementById(`totalOT${dayIndex}`).textContent = (ot15Hours + ot2xHours + ot25Hours + ot3xHours).toFixed(1);
+    document.getElementById(`ot15${dayIndex}`).textContent = ot15Hours.toFixed(1);
+    document.getElementById(`ot2x${dayIndex}`).textContent = ot2xHours.toFixed(1);
+    const ot25Cell = document.getElementById(`ot25${dayIndex}`); if (ot25Cell) ot25Cell.textContent = ot25Hours.toFixed(1);
+    const ot3xCell = document.getElementById(`ot3x${dayIndex}`); if (ot3xCell) ot3xCell.textContent = ot3xHours.toFixed(1);
+    document.getElementById(`amMP${dayIndex}`).textContent = amMP.toFixed(0);
+    document.getElementById(`pmMP${dayIndex}`).textContent = pmMP.toFixed(0);
+
+    return { call, lunchOut, lunchIn, wrap, isIdle, totalHours, regularHours, ot15Hours, ot2xHours, ot25Hours, ot3xHours, amMP, pmMP };
+  }
+
+  // Create a sequence of penalty events (AM, then PM) for a day, including timing & multiplier at each event
+  function setIdleState(dayIndex, isIdle) {
+    const row = document.getElementById(`dayRow${dayIndex}`);
+    const fields = ['call','lunchOut','lunchIn','wrap'];
+    fields.forEach(f => {
+      const el = document.getElementById(`${f}${dayIndex}`);
+      if (el) el.disabled = isIdle;
+    });
+    if (row) {
+      row.classList.toggle('idle-row', isIdle);
+    }
+  }
+
+  function buildPenaltyEventsForDay(dayIndex, metrics, workedNumber) {
+    const events = [];
+    const { call, lunchOut, lunchIn, amMP, pmMP } = metrics;
+
+    // AM events (each 30 min after 6 hours from call)
+    for (let k = 1; k <= amMP; k++) {
+      const eventTime = call + 6 + 0.5 * k;
+      const workedAtEvent = eventTime - call; // pre-lunch
+      const elapsedAtEvent = eventTime - call; // elapsed ignores lunch entirely
+      const mult = getEventMultiplier(workedAtEvent, elapsedAtEvent, workedNumber);
+      events.push({ dayIndex, type: 'AM', seqWithinType: k, time: eventTime, workedAtEvent, multiplier: mult });
+    }
+
+    // PM events (each 30 min after 6 hours from lunch-in)
+    if (lunchIn && lunchOut) {
+      const preLunchWorked = Math.max(0, lunchOut - call);
+      for (let k = 1; k <= pmMP; k++) {
+        const eventTime = lunchIn + 6 + 0.5 * k;
+        const workedAtEvent = preLunchWorked + (eventTime - lunchIn);
+        const elapsedAtEvent = eventTime - call; // elapsed from call
+        const mult = getEventMultiplier(workedAtEvent, elapsedAtEvent, workedNumber);
+        events.push({ dayIndex, type: 'PM', seqWithinType: k, time: eventTime, workedAtEvent, multiplier: mult });
+      }
+    }
+
+    return events;
+  }
+
+  // Recompute the whole week so we can apply the 20th+ penalty prevailing-rate rule
+  function recomputeAllDays() {
+    const hourlyRate = parseFloat(document.getElementById('hourlyRate').value) || 0;
+    const agreement = document.getElementById('agreement').value;
+    const environment = document.getElementById('environment').value;
+
+    const dayMetrics = [];
+    const workedNumbers = Array(7).fill(0);
+
+    // 1) Compute per-day metrics (hours & counts), update hour/MP count cells
+    for (let i = 0; i < 7; i++) {
+      const m = computeDayMetrics(i);
+      dayMetrics[i] = m;
+      // Reset amounts before we compute them
+      document.getElementById(`amMPAmount${i}`).textContent = `$0.00`;
+      document.getElementById(`pmMPAmount${i}`).textContent = `$0.00`;
+    }
+
+    // 2) Assign worked day numbers (chronological): 1..7 for days with hours and not idle
+    let workCount = 0;
+    for (let i = 0; i < 7; i++) {
+      const m = dayMetrics[i];
+      if (m.totalHours > 0 && !m.isIdle) { workCount++; workedNumbers[i] = workCount; }
+    }
+
+    // 3) Build all penalty events with knowledge of 6th/7th day status
+    let allEvents = [];
+    for (let i = 0; i < 7; i++) {
+      allEvents = allEvents.concat(buildPenaltyEventsForDay(i, dayMetrics[i], workedNumbers[i]));
+    }
+    allEvents.sort((a,b) => (a.dayIndex - b.dayIndex) || (a.time - b.time));
+
+    // 4) Walk events and compute amounts with weekly rule:
+    //    - First 19 penalties: fixed contract dollars (per-day sequence 1..n)
+    //    - 20th+ penalties: 1 hour at PREVAILING rate (multiplier at the 20th event) * hourlyRate
+    let weeklyCount = 0;
+    let prevailingMultiplier = null; // 1, 1.5, or 2
+
+    const amAmountByDay = Array(7).fill(0);
+    const pmAmountByDay = Array(7).fill(0);
+
+    for (const e of allEvents) {
+      weeklyCount++;
+      let addAmount = 0;
+
+      if (weeklyCount <= 19) {
+        // Contract fixed-dollar schedule before prevailing-rate kicks in
+        addAmount = getMealPenaltyRate(agreement, environment, e.seqWithinType);
+      } else {
+        // Prevailing-rate kicks in at the 20th penalty
+        if (prevailingMultiplier === null) {
+          prevailingMultiplier = e.multiplier; // lock in at the rate during the 20th penalty
+        }
+        addAmount = hourlyRate * prevailingMultiplier; // 1 full hour at prevailing rate
+      }
+
+      if (e.type === 'AM') amAmountByDay[e.dayIndex] += addAmount;
+      else pmAmountByDay[e.dayIndex] += addAmount;
+    }
+
+    // 5) Write per-day AM/PM amount cells
+    for (let i = 0; i < 7; i++) {
+      document.getElementById(`amMPAmount${i}`).textContent = `$${amAmountByDay[i].toFixed(2)}`;
+      document.getElementById(`pmMPAmount${i}`).textContent = `$${pmAmountByDay[i].toFixed(2)}`;
+    }
+
+    // 6) Update bottom totals
+    calculateTotals();
+  }
+
+  function calculateTotals() {
+    const hourlyRate = parseFloat(document.getElementById('hourlyRate').value) || 0;
+    const guaranteedHours = parseFloat(document.getElementById('guaranteedHours').value) || 8.0;
+
+    let totalHours = 0, totalRegular = 0, total15OT = 0, total2xOT = 0, total25OT = 0, total3xOT = 0;
+    let totalIdleDays = 0, totalMealPenalties = 0, mealPenaltyAmount = 0;
+
+    // We'll compute pay buckets, separating 6th/7th day amounts from normal regular/OT pay
+    let totalRegularPaid = 0; // for non-6th/7th days only
+    let nonPremium15OTHours = 0; // 1.5x hours from non-6th/7th days
+    let nonPremium2xHours = 0;  // 2x hours from non-6th/7th days
+    let nonPremium25OTHours = 0; // 2.5x hours (AICP/golden variants)
+    let nonPremium3xHours = 0;  // 3x hours (golden hours)
+    let sixthDayAmount = 0;
+    let seventhDayAmount = 0;
+    let sixthDayPaidHours = 0;
+    let seventhDayPaidHours = 0;
+
+    // First pass: gather day totals & idle flags
+    const dayTotals = []; const dayRegulars = []; const day15OTs = []; const day2xOTs = []; const dayIsIdle = [];
+    for (let i = 0; i < 7; i++) {
+      dayTotals[i] = parseFloat(document.getElementById(`totalHours${i}`).textContent) || 0;
+      dayRegulars[i] = parseFloat(document.getElementById(`regular${i}`).textContent) || 0;
+      day15OTs[i] = parseFloat(document.getElementById(`ot15${i}`).textContent) || 0;
+      day2xOTs[i] = parseFloat(document.getElementById(`ot2x${i}`).textContent) || 0;
+      dayIsIdle[i] = document.getElementById(`idle${i}`).checked;
+    }
+
+    // Assign worked-day numbers chronologically
+    const workedNumbers = Array(7).fill(0);
+    let workCount = 0;
+    for (let i = 0; i < 7; i++) {
+      if (dayTotals[i] > 0 && !dayIsIdle[i]) { workCount++; workedNumbers[i] = workCount; }
+    }
+
+    // Second pass: accumulate hours & amounts
+    for (let i = 0; i < 7; i++) {
+      const dayTotal = dayTotals[i];
+      const dayRegular = dayRegulars[i];
+      const day15OT = day15OTs[i];
+      const day2xOT = day2xOTs[i];
+      const day25OT = parseFloat(document.getElementById(`ot25${i}`)?.textContent) || 0;
+      const day3xOT = parseFloat(document.getElementById(`ot3x${i}`)?.textContent) || 0;
+      const isIdle = dayIsIdle[i];
+
+      const dayAMMP = parseFloat(document.getElementById(`amMP${i}`).textContent) || 0;
+      const dayPMMP = parseFloat(document.getElementById(`pmMP${i}`).textContent) || 0;
+      const amAmount = parseFloat(document.getElementById(`amMPAmount${i}`).textContent.replace('$','')) || 0;
+      const pmAmount = parseFloat(document.getElementById(`pmMPAmount${i}`).textContent.replace('$','')) || 0;
+
+      mealPenaltyAmount += (amAmount + pmAmount);
+      totalHours += dayTotal;
+      totalMealPenalties += dayAMMP + dayPMMP;
+      if (isIdle) totalIdleDays++;
+
+      const wn = workedNumbers[i];
+      if (wn === 6) {
+        // 6th day premium with 8-hour minimum pay
+        const paidHours = Math.max(8, dayTotal);
+        const upTo12 = Math.min(paidHours, 12);
+        const over12 = Math.max(0, paidHours - 12);
+        sixthDayAmount += upTo12 * hourlyRate * 1.5 + over12 * hourlyRate * 2;
+        sixthDayPaidHours += paidHours; // track paid hours for display
+      } else if (wn === 7) {
+        // 7th day premium with 8-hour minimum pay
+        const paidHours = Math.max(8, dayTotal);
+        seventhDayAmount += paidHours * hourlyRate * 2;
+        seventhDayPaidHours += paidHours; // track paid hours for display
+      } else {
+        // Normal days: apply guaranteed minimum to regular hours for pay
+        if (dayTotal > 0 && !isIdle) {
+          if (dayTotal < guaranteedHours) totalRegularPaid += guaranteedHours; else totalRegularPaid += dayRegular;
+        } else if (!isIdle) {
+          totalRegularPaid += dayRegular;
+        }
+        // Count hours in the Regular/OT buckets only for non-6th/7th days
+        totalRegular += dayRegular;
+        total15OT += day15OT;
+        total2xOT += day2xOT;
+        total25OT += day25OT;
+        total3xOT += day3xOT;
+        nonPremium15OTHours += day15OT;
+        nonPremium2xHours += day2xOT;
+        nonPremium25OTHours += day25OT;
+        nonPremium3xHours += day3xOT;
+      }
+    }
+
+    const regularAmount = totalRegularPaid * hourlyRate;
+    const ot15Amount = nonPremium15OTHours * hourlyRate * 1.5;
+    const ot2xAmount = nonPremium2xHours * hourlyRate * 2;
+    const ot25Amount = nonPremium25OTHours * hourlyRate * 2.5;
+    const ot3Amount  = nonPremium3xHours  * hourlyRate * 3;
+
+    // Idle pay (unchanged): 8 hrs at half-rate per idle day
+    const idleAmount = totalIdleDays * IDLE_HOURS_PER_DAY * (hourlyRate / 2);
+
+    // Grand total includes 6th/7th day premiums
+    const totalAmount = regularAmount + ot15Amount + ot2xAmount + ot25Amount + ot3Amount + idleAmount + mealPenaltyAmount + sixthDayAmount + seventhDayAmount;
+
+    // Update bottom grid
+    document.getElementById('totalHours').textContent = totalHours.toFixed(1);
+    document.getElementById('regularHoursTotal').textContent = totalRegular.toFixed(1);
+    document.getElementById('overtimeHoursTotal').textContent = total15OT.toFixed(1);
+    document.getElementById('doubleOvertimeHoursTotal').textContent = total2xOT.toFixed(1);
+    const ot25H = document.getElementById('ot25HoursTotal'); if (ot25H) ot25H.textContent = total25OT.toFixed(1);
+    const ot3H  = document.getElementById('ot3xHoursTotal'); if (ot3H)  ot3H.textContent  = total3xOT.toFixed(1);
+
+    document.getElementById('totalAmount').textContent = `$${totalAmount.toFixed(2)}`;
+    document.getElementById('regularAmount').textContent = `$${regularAmount.toFixed(2)}`;
+    document.getElementById('overtimeAmount').textContent = `$${ot15Amount.toFixed(2)}`;
+    document.getElementById('doubleOvertimeAmount').textContent = `$${ot2xAmount.toFixed(2)}`;
+    const ot25A = document.getElementById('ot25Amount'); if (ot25A) ot25A.textContent = `$${ot25Amount.toFixed(2)}`;
+    const ot3A  = document.getElementById('ot3xAmount'); if (ot3A)  ot3A.textContent  = `$${ot3Amount.toFixed(2)}`;
+    document.getElementById('idleAmount').textContent = `$${idleAmount.toFixed(2)}`;
+    document.getElementById('mealPenaltiesAmount').textContent = `$${mealPenaltyAmount.toFixed(2)}`;
+    const sixth = document.getElementById('sixthDayAmount');
+    const seventh = document.getElementById('seventhDayAmount');
+    if (sixth) sixth.textContent = `$${sixthDayAmount.toFixed(2)}`;
+    if (seventh) seventh.textContent = `$${seventhDayAmount.toFixed(2)}`;
+
+    // Leave Hours cells for Idle/Meal Penalties blank by design; show paid hours for 6th/7th day
+    const sdh = document.getElementById('sixthDayHours'); if (sdh) sdh.textContent = sixthDayPaidHours ? sixthDayPaidHours.toFixed(1) : '';
+    const svh = document.getElementById('seventhDayHours'); if (svh) svh.textContent = seventhDayPaidHours ? seventhDayPaidHours.toFixed(1) : '';
+  }
+
+  function toggleHoursBreakdown() {
+    const breakdownColumns = document.querySelectorAll('.breakdown-column');
+    const button = document.querySelector('.hours-breakdown');
+    const buttonText = document.getElementById('breakdown-text');
+    const buttonIcon = document.getElementById('breakdown-icon');
+    const table = document.querySelector('table');
+
+    breakdownColumns.forEach(c => c.classList.toggle('hidden-column'));
+    button.classList.toggle('expanded');
+    table.classList.toggle('expanded');
+    if (button.classList.contains('expanded')) { buttonText.textContent = 'Hide Hours Breakdown'; buttonIcon.textContent = '−'; }
+    else { buttonText.textContent = 'Show Hours Breakdown'; buttonIcon.textContent = '+'; }
+  }
+
+  // ===== Boot =====
+  document.addEventListener('DOMContentLoaded', function() {
+    initializeTable();
+    // Recompute week whenever global factors change
+    document.getElementById('weekStart').addEventListener('change', () => { initializeTable(); recomputeAllDays(); });
+    document.getElementById('agreement').addEventListener('change', recomputeAllDays);
+    document.getElementById('environment').addEventListener('change', recomputeAllDays);
+    
+    document.getElementById('goldenHours').addEventListener('change', recomputeAllDays);
+    document.getElementById('otBasis').addEventListener('change', recomputeAllDays);
+    document.getElementById('hourlyRate').addEventListener('input', recomputeAllDays); // affects prevailing-rate pay
+    document.getElementById('guaranteedHours').addEventListener('input', calculateTotals); // only affects pay breakdown
+
+    // Initial compute
+    recomputeAllDays();
+  });
+</script>
+</body>
+</html>
