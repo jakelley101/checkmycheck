@@ -108,6 +108,13 @@
                 <option value="elapsed">Elapsed (Call→Wrap)</option>
               </select>
             </div>
+            <div>
+              <label for="flsaTrueUp">FLSA OT</label>
+              <div class="switch-row">
+                <input type="checkbox" id="flsaTrueUp" checked>
+                <span class="hint">Adds weekly federal OT reconciliation</span>
+              </div>
+            </div>
           </div>
         </details>
       </div>
@@ -202,6 +209,11 @@
             <td class="hours-value" id="seventhDayHours"></td> <!-- intentionally blank -->
             <td class="amount-value" id="seventhDayAmount">$0.00</td>
           </tr>
+          <tr id="row-flsa">
+            <td class="category-label">FLSA OT</td>
+            <td class="hours-value" id="flsaHours"></td>
+            <td class="amount-value" id="flsaAmount">$0.00</td>
+          </tr>
           <tr>
             <td class="category-label">Total</td>
             <td class="hours-value" id="totalHours">0.0</td>
@@ -252,10 +264,8 @@
   function multiplierFromProfile(hours, agreement, golden) {
     const profile = OT_PROFILES[agreement] || OT_PROFILES.Basic;
     const bands = applyGolden(profile.bands, profile, golden);
-    let prev = 0;
     for (const b of bands) {
       if (hours <= b.limit) return b.mult;
-      prev = b.limit;
     }
     return bands[bands.length-1].mult;
   }
@@ -506,9 +516,9 @@
 
     // 4) Walk events and compute amounts with weekly rule:
     //    - First 19 penalties: fixed contract dollars (per-day sequence 1..n)
-    //    - 20th+ penalties: 1 hour at PREVAILING rate (multiplier at the 20th event) * hourlyRate
+    //    - 20th+ penalties: 1 hour at the PREVAILING rate at each event (rolling)
     let weeklyCount = 0;
-    let prevailingMultiplier = null; // 1, 1.5, or 2
+    let weeklyPrevailingTotal = 0;
 
     const amAmountByDay = Array(7).fill(0);
     const pmAmountByDay = Array(7).fill(0);
@@ -518,14 +528,10 @@
       let addAmount = 0;
 
       if (weeklyCount <= 19) {
-        // Contract fixed-dollar schedule before prevailing-rate kicks in
         addAmount = getMealPenaltyRate(agreement, environment, e.seqWithinType);
       } else {
-        // Prevailing-rate kicks in at the 20th penalty
-        if (prevailingMultiplier === null) {
-          prevailingMultiplier = e.multiplier; // lock in at the rate during the 20th penalty
-        }
-        addAmount = hourlyRate * prevailingMultiplier; // 1 full hour at prevailing rate
+        addAmount = hourlyRate * e.multiplier; // rolling prevailing
+        weeklyPrevailingTotal += addAmount;
       }
 
       if (e.type === 'AM') amAmountByDay[e.dayIndex] += addAmount;
@@ -537,6 +543,9 @@
       document.getElementById(`amMPAmount${i}`).textContent = `$${amAmountByDay[i].toFixed(2)}`;
       document.getElementById(`pmMPAmount${i}`).textContent = `$${pmAmountByDay[i].toFixed(2)}`;
     }
+
+    // Store prevailing total for FLSA RR calculation
+    window._mpPrevailingTotal = weeklyPrevailingTotal;
 
     // 6) Update bottom totals
     calculateTotals();
@@ -562,12 +571,19 @@
 
     // First pass: gather day totals & idle flags
     const dayTotals = []; const dayRegulars = []; const day15OTs = []; const day2xOTs = []; const dayIsIdle = [];
+    const day25OTs = []; const day3xOTs = [];
     for (let i = 0; i < 7; i++) {
       dayTotals[i] = parseFloat(document.getElementById(`totalHours${i}`).textContent) || 0;
       dayRegulars[i] = parseFloat(document.getElementById(`regular${i}`).textContent) || 0;
       day15OTs[i] = parseFloat(document.getElementById(`ot15${i}`).textContent) || 0;
       day2xOTs[i] = parseFloat(document.getElementById(`ot2x${i}`).textContent) || 0;
+      day25OTs[i] = parseFloat(document.getElementById(`ot25${i}`)?.textContent) || 0;
+      day3xOTs[i] = parseFloat(document.getElementById(`ot3x${i}`)?.textContent) || 0;
       dayIsIdle[i] = document.getElementById(`idle${i}`).checked;
+
+      const amAmount = parseFloat(document.getElementById(`amMPAmount${i}`).textContent.replace('$','')) || 0;
+      const pmAmount = parseFloat(document.getElementById(`pmMPAmount${i}`).textContent.replace('$','')) || 0;
+      mealPenaltyAmount += (amAmount + pmAmount);
     }
 
     // Assign worked-day numbers chronologically
@@ -583,16 +599,12 @@
       const dayRegular = dayRegulars[i];
       const day15OT = day15OTs[i];
       const day2xOT = day2xOTs[i];
-      const day25OT = parseFloat(document.getElementById(`ot25${i}`)?.textContent) || 0;
-      const day3xOT = parseFloat(document.getElementById(`ot3x${i}`)?.textContent) || 0;
+      const day25OT = day25OTs[i];
+      const day3xOT = day3xOTs[i];
       const isIdle = dayIsIdle[i];
 
       const dayAMMP = parseFloat(document.getElementById(`amMP${i}`).textContent) || 0;
       const dayPMMP = parseFloat(document.getElementById(`pmMP${i}`).textContent) || 0;
-      const amAmount = parseFloat(document.getElementById(`amMPAmount${i}`).textContent.replace('$','')) || 0;
-      const pmAmount = parseFloat(document.getElementById(`pmMPAmount${i}`).textContent.replace('$','')) || 0;
-
-      mealPenaltyAmount += (amAmount + pmAmount);
       totalHours += dayTotal;
       totalMealPenalties += dayAMMP + dayPMMP;
       if (isIdle) totalIdleDays++;
@@ -639,8 +651,80 @@
     // Idle pay (unchanged): 8 hrs at half-rate per idle day
     const idleAmount = totalIdleDays * IDLE_HOURS_PER_DAY * (hourlyRate / 2);
 
-    // Grand total includes 6th/7th day premiums
-    const totalAmount = regularAmount + ot15Amount + ot2xAmount + ot25Amount + ot3Amount + idleAmount + mealPenaltyAmount + sixthDayAmount + seventhDayAmount;
+    // ==== FLSA OT (weekly true-up) ====
+    let flsaAmount = 0;
+    let flsaHoursOver40 = 0;
+    const flsaToggle = document.getElementById('flsaTrueUp');
+    const includeFLSA = flsaToggle ? flsaToggle.checked : true;
+
+    if (includeFLSA) {
+      // Weekly worked hours (exclude idle/no-work days)
+      let weeklyWorkedHours = 0;
+      for (let i = 0; i < 7; i++) {
+        if (!dayIsIdle[i]) weeklyWorkedHours += dayTotals[i];
+      }
+
+      if (weeklyWorkedHours > 40) {
+        flsaHoursOver40 = weeklyWorkedHours - 40;
+
+        // Regular Rate per FLSA: base straight-time pay for ALL worked hours
+        // plus any prevailing-rate meal penalties (exclude fixed $ MPs and premium portions).
+        const rrNumerator = (hourlyRate * weeklyWorkedHours) + (window._mpPrevailingTotal || 0);
+        const regularRate = rrNumerator / weeklyWorkedHours;
+
+        // Credit premiums already paid on the LAST >40 hours only.
+        let credits = 0;
+        let cumulative = 0;
+        const { agreement } = getSelectedOT();
+        const golden = !!document.getElementById('goldenHours')?.checked;
+
+        for (let i = 0; i < 7; i++) {
+          const dayTotal = dayTotals[i];
+          if (dayIsIdle[i] || dayTotal <= 0) { cumulative += Math.max(0, dayTotal); continue; }
+
+          const wn = workedNumbers[i];
+          // Build WORKED-basis segments for the day
+          let segments = [];
+          if (wn === 6) {
+            const upTo12 = Math.min(dayTotal, 12);
+            const over12 = Math.max(0, dayTotal - 12);
+            if (upTo12 > 0) segments.push({ dur: upTo12, mult: 1.5 });
+            if (over12 > 0) segments.push({ dur: over12, mult: 2 });
+          } else if (wn === 7) {
+            if (dayTotal > 0) segments.push({ dur: dayTotal, mult: 2 });
+          } else {
+            const b = allocateOTBuckets(dayTotal, agreement, golden);
+            if (b.regular) segments.push({ dur: b.regular, mult: 1 });
+            if (b.ot15)    segments.push({ dur: b.ot15,    mult: 1.5 });
+            if (b.ot2)     segments.push({ dur: b.ot2,     mult: 2 });
+            if (b.ot25)    segments.push({ dur: b.ot25,    mult: 2.5 });
+            if (b.ot3)     segments.push({ dur: b.ot3,     mult: 3 });
+          }
+
+          const hoursAfter  = cumulative + dayTotal;
+          const overOnThisDay = Math.max(0, hoursAfter - 40);
+          if (overOnThisDay > 0) {
+            // Take the last `overOnThisDay` hours from today's segments (end of day first)
+            let take = Math.min(overOnThisDay, dayTotal);
+            for (let s = segments.length - 1; s >= 0 && take > 0; s--) {
+              const seg = segments[s];
+              const used = Math.min(take, seg.dur);
+              if (seg.mult > 1) {
+                credits += (seg.mult - 1) * hourlyRate * used; // premium portion over straight time
+              }
+              take -= used;
+            }
+          }
+          cumulative = hoursAfter;
+        }
+
+        const requiredPremium = 0.5 * regularRate * flsaHoursOver40;
+        flsaAmount = Math.max(0, requiredPremium - credits);
+      }
+    }
+
+    // Grand total includes 6th/7th premiums and FLSA true-up
+    const totalAmount = regularAmount + ot15Amount + ot2xAmount + ot25Amount + ot3Amount + idleAmount + mealPenaltyAmount + sixthDayAmount + seventhDayAmount + flsaAmount;
 
     // Update bottom grid
     document.getElementById('totalHours').textContent = totalHours.toFixed(1);
@@ -662,6 +746,8 @@
     const seventh = document.getElementById('seventhDayAmount');
     if (sixth) sixth.textContent = `$${sixthDayAmount.toFixed(2)}`;
     if (seventh) seventh.textContent = `$${seventhDayAmount.toFixed(2)}`;
+    const flsaAmt = document.getElementById('flsaAmount'); if (flsaAmt) flsaAmt.textContent = `$${flsaAmount.toFixed(2)}`;
+    const flsaHrs = document.getElementById('flsaHours'); if (flsaHrs) flsaHrs.textContent = '';
 
     // Leave Hours cells for Idle/Meal Penalties blank by design; show paid hours for 6th/7th day
     const sdh = document.getElementById('sixthDayHours'); if (sdh) sdh.textContent = sixthDayPaidHours ? sixthDayPaidHours.toFixed(1) : '';
@@ -689,11 +775,12 @@
     document.getElementById('weekStart').addEventListener('change', () => { initializeTable(); recomputeAllDays(); });
     document.getElementById('agreement').addEventListener('change', recomputeAllDays);
     document.getElementById('environment').addEventListener('change', recomputeAllDays);
-    
+
     document.getElementById('goldenHours').addEventListener('change', recomputeAllDays);
     document.getElementById('otBasis').addEventListener('change', recomputeAllDays);
     document.getElementById('hourlyRate').addEventListener('input', recomputeAllDays); // affects prevailing-rate pay
     document.getElementById('guaranteedHours').addEventListener('input', calculateTotals); // only affects pay breakdown
+    const flsaToggle = document.getElementById('flsaTrueUp'); if (flsaToggle) flsaToggle.addEventListener('change', calculateTotals);
 
     // Initial compute
     recomputeAllDays();
