@@ -151,8 +151,7 @@
         <tbody id="timecardTable"></tbody>
       </table>
     </div>
-
-    <button class="calculate-btn" onclick="calculateTotals()">Calculate Totals</button>
+    <div class="hint" style="margin:6px 0 0 0;">Totals update automatically.</div>
 
     <div class="totals-section">
       <table class="totals-table">
@@ -332,6 +331,13 @@
     if (workedHours <= 8) return 1;
     if (workedHours <= 12) return 1.5;
     return 2;
+  }
+
+  function setRowVisibility(rowId, amount, always=false) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    if (always) { row.style.display = ''; return; }
+    row.style.display = (amount > 0.009) ? '' : 'none';
   }
 
   function generateWeekDates(startDate) {
@@ -749,6 +755,18 @@
     const flsaAmt = document.getElementById('flsaAmount'); if (flsaAmt) flsaAmt.textContent = `$${flsaAmount.toFixed(2)}`;
     const flsaHrs = document.getElementById('flsaHours'); if (flsaHrs) flsaHrs.textContent = '';
 
+    // Show only rows with non-zero amounts (Regular always shown)
+    setRowVisibility('row-regular', regularAmount, true);
+    setRowVisibility('row-ot15', ot15Amount);
+    setRowVisibility('row-ot2x', ot2xAmount);
+    setRowVisibility('row-ot25', ot25Amount);
+    setRowVisibility('row-ot3x', ot3Amount);
+    setRowVisibility('row-idle', idleAmount);
+    setRowVisibility('row-meals', mealPenaltyAmount);
+    setRowVisibility('row-sixth', sixthDayAmount);
+    setRowVisibility('row-seventh', seventhDayAmount);
+    setRowVisibility('row-flsa', flsaAmount);
+
     // Leave Hours cells for Idle/Meal Penalties blank by design; show paid hours for 6th/7th day
     const sdh = document.getElementById('sixthDayHours'); if (sdh) sdh.textContent = sixthDayPaidHours ? sixthDayPaidHours.toFixed(1) : '';
     const svh = document.getElementById('seventhDayHours'); if (svh) svh.textContent = seventhDayPaidHours ? seventhDayPaidHours.toFixed(1) : '';
@@ -788,3 +806,4 @@
 </script>
 </body>
 </html>
+
