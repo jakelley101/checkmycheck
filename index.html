@@ -24,6 +24,7 @@
     td { border-bottom: 1px solid #f2f2f7; text-align: center; }
     .date-cell { text-align: left; font-weight: 500; color: #007aff; }
     .time-input { width: 60px; padding: 6px; border: 1px solid #d1d1d6; border-radius: 4px; text-align: center; font-size: 13px; }
+    .status-select { padding: 6px 8px; border: 1px solid #d1d1d6; border-radius: 4px; font-size: 13px; width: auto; }
     .checkbox { width: 16px; height: 16px; }
     .calculated-cell { background: #f8f9fa; font-weight: 500; color: #1d1d1f; }
     .totals-section { margin-top: 15px; background: #f8f9fa; padding: 20px; border-radius: 8px; }
@@ -40,16 +41,15 @@
     .hours-breakdown:hover { background: #007aff; color: white; }
     .hours-breakdown.expanded { background: #007aff; color: white; }
     .hidden-column { display: none; }
-      /* Idle row visual state */
     tr.idle-row td { background: #f2f2f7; color: #8e8e93; }
     tr.idle-row .date-cell { color: #8e8e93; }
     .time-input:disabled { background: #ededf0; color: #8e8e93; cursor: not-allowed; }
-  .checkbox-inline{display:flex;align-items:center;gap:10px;}
-  .checkbox-inline input[type="checkbox"]{width:16px;height:16px;accent-color:#007aff;}
-  .checkbox-inline small{font-size:13px;color:#6e6e73;}
-  .switch-row{display:flex;align-items:center;gap:10px;padding-top:6px}
-  .switch-row input[type="checkbox"]{width:18px;height:18px;accent-color:#007aff}
-  .hint{font-size:13px;color:#6e6e73}
+    .checkbox-inline{display:flex;align-items:center;gap:10px;}
+    .checkbox-inline input[type="checkbox"]{width:16px;height:16px;accent-color:#007aff;}
+    .checkbox-inline small{font-size:13px;color:#6e6e73;}
+    .switch-row{display:flex;align-items:center;gap:10px;padding-top:6px}
+    .switch-row input[type="checkbox"]{width:18px;height:18px;accent-color:#007aff}
+    .hint{font-size:13px;color:#6e6e73}
   </style>
 </head>
 <body>
@@ -119,7 +119,6 @@
               <label for="kitRental">Kit/Box Rental ($)</label>
               <input type="number" id="kitRental" step="0.01" placeholder="0.00" />
             </div>
-          
           </div>
         </details>
       </div>
@@ -135,7 +134,7 @@
         <thead>
           <tr>
             <th>Date</th>
-            <th>Idle?</th>
+            <th>Status</th>
             <th>Call</th>
             <th>Lunch Out</th>
             <th>Lunch In</th>
@@ -195,29 +194,43 @@
           </tr>
           <tr id="row-idle">
             <td class="category-label">Idle</td>
-            <td class="hours-value" id="idleTotal"></td> <!-- intentionally blank -->
+            <td class="hours-value" id="idleTotal"></td>
             <td class="amount-value" id="idleAmount">$0.00</td>
+          </tr>
+          <tr id="row-holiday-off">
+            <td class="category-label">Holiday (Off)</td>
+            <td class="hours-value" id="holidayOffHours"></td>
+            <td class="amount-value" id="holidayOffAmount">$0.00</td>
+          </tr>
+          <tr id="row-holiday-worked">
+            <td class="category-label">Holiday — Worked (2x)</td>
+            <td class="hours-value" id="holidayWorkedHours"></td>
+            <td class="amount-value" id="holidayWorkedAmount">$0.00</td>
           </tr>
           <tr id="row-meals">
             <td class="category-label">Meal Penalties</td>
-            <td class="hours-value" id="mealPenaltiesTotal"></td> <!-- intentionally blank -->
+            <td class="hours-value" id="mealPenaltiesTotal"></td>
             <td class="amount-value" id="mealPenaltiesAmount">$0.00</td>
           </tr>
           <tr id="row-sixth">
             <td class="category-label">6th Day</td>
-            <td class="hours-value" id="sixthDayHours"></td> <!-- intentionally blank -->
+            <td class="hours-value" id="sixthDayHours"></td>
             <td class="amount-value" id="sixthDayAmount">$0.00</td>
           </tr>
           <tr id="row-seventh">
             <td class="category-label">7th Day</td>
-            <td class="hours-value" id="seventhDayHours"></td> <!-- intentionally blank -->
+            <td class="hours-value" id="seventhDayHours"></td>
             <td class="amount-value" id="seventhDayAmount">$0.00</td>
           </tr>
-          
           <tr id="row-kit">
             <td class="category-label">Kit/Box Rental</td>
-            <td class="hours-value" id="kitHours"></td> <!-- intentionally blank -->
+            <td class="hours-value" id="kitHours"></td>
             <td class="amount-value" id="kitAmount">$0.00</td>
+          </tr>
+          <tr id="row-flsa">
+            <td class="category-label">FLSA OT</td>
+            <td class="hours-value" id="flsaHours"></td>
+            <td class="amount-value" id="flsaAmount">$0.00</td>
           </tr>
           <tr>
             <td class="category-label">Total</td>
@@ -234,7 +247,6 @@
   const IDLE_HOURS_PER_DAY = 8; // fixed display & pay logic for idle
 
   // ===== Helpers =====
-  // OT Profiles (core bands). Golden Hours (3x after 15) can be toggled for non-AICP.
   const OT_PROFILES = {
     Basic: { bands: [ {limit:8, mult:1}, {limit:12, mult:1.5}, {limit:Infinity, mult:2} ], goldenAfter: 15, goldenMult: 3 },
     ASA:   { bands: [ {limit:8, mult:1}, {limit:12, mult:1.5}, {limit:Infinity, mult:2} ], goldenAfter: 15, goldenMult: 3 },
@@ -249,7 +261,6 @@
   }
   function applyGolden(bands, profile, golden) {
     if (!golden || !profile.goldenAfter || profile === OT_PROFILES.AICP) return bands;
-    // Insert a 3x band after profile.goldenAfter
     const res = [];
     for (const b of bands) {
       if (b.limit <= profile.goldenAfter) { res.push({...b}); }
@@ -272,8 +283,7 @@
   function allocateOTBuckets(totalHours, agreement, golden) {
     const profile = OT_PROFILES[agreement] || OT_PROFILES.Basic;
     const bands = applyGolden(profile.bands, profile, golden);
-    let remaining = totalHours;
-    let prev = 0;
+    let remaining = totalHours; let prev = 0;
     const buckets = { regular:0, ot15:0, ot2:0, ot25:0, ot3:0 };
     for (const b of bands) {
       const span = Math.min(remaining, Math.max(0, b.limit - prev));
@@ -283,8 +293,7 @@
         else if (b.mult === 2) buckets.ot2 += span;
         else if (b.mult === 2.5) buckets.ot25 += span;
         else if (b.mult === 3) buckets.ot3 += span;
-        remaining -= span;
-        prev = b.limit;
+        remaining -= span; prev = b.limit;
       }
       if (remaining <= 0) break;
     }
@@ -298,10 +307,16 @@
     }
     return buckets;
   }
-  function getEventMultiplier(workedAtEvent, elapsedAtEvent, workedNumber) {
+
+  function getDayStatus(idx){
+    return (document.getElementById(`status${idx}`)?.value) || 'none';
+  }
+
+  function getEventMultiplier(workedAtEvent, elapsedAtEvent, workedNumber, dayStatus) {
     const { agreement, golden } = getSelectedOT();
     const basis = (document.getElementById('otBasis')?.value) || 'worked';
     const basisHours = basis === 'elapsed' ? elapsedAtEvent : workedAtEvent;
+    if (dayStatus === 'holiday_worked') return 2; // holiday worked: 2x all day
     if (workedNumber === 7) return 2; // 7th day: 2x all
     if (workedNumber === 6) return basisHours <= 12 ? 1.5 : 2; // 6th day rule
     return multiplierFromProfile(basisHours, agreement, golden);
@@ -323,28 +338,23 @@
     if (penaltyNumber <= 4) return rates[2];
     return rates[3];
   }
-  function getMultiplierFromWorkedHours(workedHours) {
-    if (workedHours <= 8) return 1;
-    if (workedHours <= 12) return 1.5;
-    return 2;
-  }
+
   function setRowVisibility(rowId, amount, always=false) {
     const row = document.getElementById(rowId);
     if (!row) return;
     if (always) { row.style.display = ''; return; }
     row.style.display = (amount > 0.009) ? '' : 'none';
   }
-  function generateWeekDates(startDate) {
-    const dates = [];
-    const start = new Date(startDate);
-    start.setMinutes(start.getMinutes() + start.getTimezoneOffset()); // normalize
-    for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); dates.push(d); }
-    return dates;
-  }
-  function formatDate(date) {
-    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+
+  function setDayStatusState(dayIndex) {
+    const status = getDayStatus(dayIndex);
+    const row = document.getElementById(`dayRow${dayIndex}`);
+    const disable = (status === 'idle' || status === 'holiday_off');
+    ['call','lunchOut','lunchIn','wrap'].forEach(f => {
+      const el = document.getElementById(`${f}${dayIndex}`);
+      if (el) el.disabled = disable;
+    });
+    if (row) { row.classList.toggle('idle-row', disable); }
   }
 
   // ===== UI Setup =====
@@ -358,49 +368,55 @@
       const row = document.createElement('tr');
       row.setAttribute('id', `dayRow${index}`);
       row.innerHTML = `
-        <td class=\"date-cell\">${formatDate(date)}</td>
-        <td><input type=\"checkbox\" class=\"checkbox\" id=\"idle${index}\"></td>
-        <td><input type=\"number\" class=\"time-input\" id=\"call${index}\" step=\"0.1\" placeholder=\"0.0\"></td>
-        <td><input type=\"number\" class=\"time-input\" id=\"lunchOut${index}\" step=\"0.1\" placeholder=\"0.0\"></td>
-        <td><input type=\"number\" class=\"time-input\" id=\"lunchIn${index}\" step=\"0.1\" placeholder=\"0.0\"></td>
-        <td><input type=\"number\" class=\"time-input\" id=\"wrap${index}\" step=\"0.1\" placeholder=\"0.0\"></td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"totalHours${index}\">0.0</td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"regular${index}\">0.0</td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"totalOT${index}\">0.0</td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"ot15${index}\">0.0</td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"ot2x${index}\">0.0</td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"ot25${index}\">0.0</td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"ot3x${index}\">0.0</td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"amMP${index}\">0</td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"pmMP${index}\">0</td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"amMPAmount${index}\">$0.00</td>
-        <td class=\"calculated-cell breakdown-column hidden-column\" id=\"pmMPAmount${index}\">$0.00</td>
+        <td class="date-cell">${formatDate(date)}</td>
+        <td>
+          <select id="status${index}" class="status-select">
+            <option value="none" selected>—</option>
+            <option value="idle">Idle</option>
+            <option value="grace">Grace Used</option>
+            <option value="holiday_off">Paid Holiday - Off</option>
+            <option value="holiday_worked">Holiday - Worked (2x)</option>
+          </select>
+        </td>
+        <td><input type="number" class="time-input" id="call${index}" step="0.1" placeholder="0.0"></td>
+        <td><input type="number" class="time-input" id="lunchOut${index}" step="0.1" placeholder="0.0"></td>
+        <td><input type="number" class="time-input" id="lunchIn${index}" step="0.1" placeholder="0.0"></td>
+        <td><input type="number" class="time-input" id="wrap${index}" step="0.1" placeholder="0.0"></td>
+        <td class="calculated-cell breakdown-column hidden-column" id="totalHours${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="regular${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="totalOT${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="ot15${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="ot2x${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="ot25${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="ot3x${index}">0.0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="amMP${index}">0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="pmMP${index}">0</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="amMPAmount${index}">$0.00</td>
+        <td class="calculated-cell breakdown-column hidden-column" id="pmMPAmount${index}">$0.00</td>
       `;
       tbody.appendChild(row);
 
       ['call','lunchOut','lunchIn','wrap'].forEach(field => {
         document.getElementById(`${field}${index}`).addEventListener('input', recomputeAllDays);
       });
-      document.getElementById(`idle${index}`).addEventListener('change', (e) => {
-        setIdleState(index, e.target.checked);
-        recomputeAllDays();
-      });
+      document.getElementById(`status${index}`).addEventListener('change', () => { setDayStatusState(index); recomputeAllDays(); });
 
-      setIdleState(index, document.getElementById(`idle${index}`).checked);
+      setDayStatusState(index);
     });
   }
 
   // Compute per-day metrics (hours, OT breakdown, and MP counts), without amounts
   function computeDayMetrics(dayIndex) {
+    const status = getDayStatus(dayIndex);
     const call = parseFloat(document.getElementById(`call${dayIndex}`).value) || 0;
     const lunchOut = parseFloat(document.getElementById(`lunchOut${dayIndex}`).value) || 0;
     const lunchIn = parseFloat(document.getElementById(`lunchIn${dayIndex}`).value) || 0;
     const wrap = parseFloat(document.getElementById(`wrap${dayIndex}`).value) || 0;
-    const isIdle = document.getElementById(`idle${dayIndex}`).checked;
+    const isNonWorked = (status === 'idle' || status === 'holiday_off');
 
     let totalHours = 0, regularHours = 0, ot15Hours = 0, ot2xHours = 0, ot25Hours = 0, ot3xHours = 0, amMP = 0, pmMP = 0;
 
-    if (call && wrap && !isIdle) {
+    if (call && wrap && !isNonWorked) {
       totalHours = wrap - call;
       if (lunchOut && lunchIn) totalHours -= (lunchIn - lunchOut);
 
@@ -409,11 +425,7 @@
       const elapsedHours = wrap - call; // ignores lunch
       const hoursForBuckets = basis === 'elapsed' ? elapsedHours : totalHours;
       const buckets = allocateOTBuckets(hoursForBuckets, agreement, golden);
-      regularHours = buckets.regular;
-      ot15Hours = buckets.ot15;
-      ot2xHours = buckets.ot2;
-      ot25Hours = buckets.ot25;
-      ot3xHours = buckets.ot3;
+      regularHours = buckets.regular; ot15Hours = buckets.ot15; ot2xHours = buckets.ot2; ot25Hours = buckets.ot25; ot3xHours = buckets.ot3;
 
       if (lunchOut && lunchIn) {
         if (lunchOut - call > 6) amMP = Math.ceil((lunchOut - call - 6) * 2);
@@ -433,38 +445,36 @@
     document.getElementById(`amMP${dayIndex}`).textContent = amMP.toFixed(0);
     document.getElementById(`pmMP${dayIndex}`).textContent = pmMP.toFixed(0);
 
-    return { call, lunchOut, lunchIn, wrap, isIdle, totalHours, regularHours, ot15Hours, ot2xHours, ot25Hours, ot3xHours, amMP, pmMP };
-  }
-
-  function setIdleState(dayIndex, isIdle) {
-    const row = document.getElementById(`dayRow${dayIndex}`);
-    const fields = ['call','lunchOut','lunchIn','wrap'];
-    fields.forEach(f => {
-      const el = document.getElementById(`${f}${dayIndex}`);
-      if (el) el.disabled = isIdle;
-    });
-    if (row) { row.classList.toggle('idle-row', isIdle); }
+    return { status, call, lunchOut, lunchIn, wrap, isNonWorked, totalHours, regularHours, ot15Hours, ot2xHours, ot25Hours, ot3xHours, amMP, pmMP };
   }
 
   function buildPenaltyEventsForDay(dayIndex, metrics, workedNumber) {
     const events = [];
-    const { call, lunchOut, lunchIn, amMP, pmMP } = metrics;
+    const { status, call, lunchOut, lunchIn } = metrics;
+    let { amMP, pmMP } = metrics;
 
+    // Grace: drop the first penalty of the day (AM first, else PM)
+    if (status === 'grace') {
+      if (amMP > 0) amMP -= 1; else if (pmMP > 0) pmMP -= 1;
+    }
+
+    // AM events (each 30 min after 6 hours from call)
     for (let k = 1; k <= amMP; k++) {
       const eventTime = call + 6 + 0.5 * k;
       const workedAtEvent = eventTime - call; // pre-lunch
       const elapsedAtEvent = eventTime - call; // elapsed ignores lunch entirely
-      const mult = getEventMultiplier(workedAtEvent, elapsedAtEvent, workedNumber);
+      const mult = getEventMultiplier(workedAtEvent, elapsedAtEvent, workedNumber, status);
       events.push({ dayIndex, type: 'AM', seqWithinType: k, time: eventTime, workedAtEvent, multiplier: mult });
     }
 
+    // PM events (each 30 min after 6 hours from lunch-in)
     if (lunchIn && lunchOut) {
       const preLunchWorked = Math.max(0, lunchOut - call);
       for (let k = 1; k <= pmMP; k++) {
         const eventTime = lunchIn + 6 + 0.5 * k;
         const workedAtEvent = preLunchWorked + (eventTime - lunchIn);
         const elapsedAtEvent = eventTime - call; // elapsed from call
-        const mult = getEventMultiplier(workedAtEvent, elapsedAtEvent, workedNumber);
+        const mult = getEventMultiplier(workedAtEvent, elapsedAtEvent, workedNumber, status);
         events.push({ dayIndex, type: 'PM', seqWithinType: k, time: eventTime, workedAtEvent, multiplier: mult });
       }
     }
@@ -488,10 +498,11 @@
       document.getElementById(`pmMPAmount${i}`).textContent = `$0.00`;
     }
 
+    // count worked days (exclude Idle & Holiday Off)
     let workCount = 0;
     for (let i = 0; i < 7; i++) {
       const m = dayMetrics[i];
-      if (m.totalHours > 0 && !m.isIdle) { workCount++; workedNumbers[i] = workCount; }
+      if (m.totalHours > 0 && !m.isNonWorked) { workCount++; workedNumbers[i] = workCount; }
     }
 
     let allEvents = [];
@@ -502,7 +513,6 @@
 
     let weeklyCount = 0;
     let weeklyPrevailingTotal = 0;
-
     const amAmountByDay = Array(7).fill(0);
     const pmAmountByDay = Array(7).fill(0);
 
@@ -548,9 +558,10 @@
     let seventhDayAmount = 0;
     let sixthDayPaidHours = 0;
     let seventhDayPaidHours = 0;
+    let holidayOffAmount = 0; let holidayOffCount = 0;
+    let holidayWorkedAmount = 0; let holidayWorkedHours = 0;
 
-    const dayTotals = []; const dayRegulars = []; const day15OTs = []; const day2xOTs = []; const dayIsIdle = [];
-    const day25OTs = []; const day3xOTs = [];
+    const dayTotals = []; const dayRegulars = []; const day15OTs = []; const day2xOTs = []; const day25OTs = []; const day3xOTs = []; const dayStatus = [];
     for (let i = 0; i < 7; i++) {
       dayTotals[i] = parseFloat(document.getElementById(`totalHours${i}`).textContent) || 0;
       dayRegulars[i] = parseFloat(document.getElementById(`regular${i}`).textContent) || 0;
@@ -558,7 +569,7 @@
       day2xOTs[i] = parseFloat(document.getElementById(`ot2x${i}`).textContent) || 0;
       day25OTs[i] = parseFloat(document.getElementById(`ot25${i}`)?.textContent) || 0;
       day3xOTs[i] = parseFloat(document.getElementById(`ot3x${i}`)?.textContent) || 0;
-      dayIsIdle[i] = document.getElementById(`idle${i}`).checked;
+      dayStatus[i] = getDayStatus(i);
 
       const amAmount = parseFloat(document.getElementById(`amMPAmount${i}`).textContent.replace('$','')) || 0;
       const pmAmount = parseFloat(document.getElementById(`pmMPAmount${i}`).textContent.replace('$','')) || 0;
@@ -567,24 +578,36 @@
 
     const workedNumbers = Array(7).fill(0);
     let workCount = 0;
-    for (let i = 0; i < 7; i++) {
-      if (dayTotals[i] > 0 && !dayIsIdle[i]) { workCount++; workedNumbers[i] = workCount; }
-    }
+    for (let i = 0; i < 7; i++) { if (dayTotals[i] > 0 && !(dayStatus[i] === 'idle' || dayStatus[i] === 'holiday_off')) { workCount++; workedNumbers[i] = workCount; } }
 
     for (let i = 0; i < 7; i++) {
+      const status = dayStatus[i];
       const dayTotal = dayTotals[i];
       const dayRegular = dayRegulars[i];
       const day15OT = day15OTs[i];
       const day2xOT = day2xOTs[i];
       const day25OT = day25OTs[i];
       const day3xOT = day3xOTs[i];
-      const isIdle = dayIsIdle[i];
 
       const dayAMMP = parseFloat(document.getElementById(`amMP${i}`).textContent) || 0;
       const dayPMMP = parseFloat(document.getElementById(`pmMP${i}`).textContent) || 0;
       totalHours += dayTotal;
       totalMealPenalties += dayAMMP + dayPMMP;
-      if (isIdle) totalIdleDays++;
+
+      if (status === 'idle') {
+        totalIdleDays++;
+        continue; // rest handled by idleAmount below
+      }
+      if (status === 'holiday_off') {
+        holidayOffCount++;
+        holidayOffAmount += 8 * hourlyRate; // flat 8 hours @ regular
+        continue;
+      }
+      if (status === 'holiday_worked') {
+        holidayWorkedHours += dayTotal;
+        holidayWorkedAmount += dayTotal * hourlyRate * 2; // 2x all hours
+        continue; // exclude from normal buckets & 6th/7th handling
+      }
 
       const wn = workedNumbers[i];
       if (wn === 6) {
@@ -598,10 +621,8 @@
         seventhDayAmount += paidHours * hourlyRate * 2;
         seventhDayPaidHours += paidHours;
       } else {
-        if (dayTotal > 0 && !isIdle) {
+        if (dayTotal > 0) {
           if (dayTotal < guaranteedHours) totalRegularPaid += guaranteedHours; else totalRegularPaid += dayRegular;
-        } else if (!isIdle) {
-          totalRegularPaid += dayRegular;
         }
         totalRegular += dayRegular;
         total15OT += day15OT;
@@ -631,25 +652,29 @@
 
     if (includeFLSA) {
       let weeklyWorkedHours = 0;
-      for (let i = 0; i < 7; i++) { if (!dayIsIdle[i]) weeklyWorkedHours += dayTotals[i]; }
+      for (let i = 0; i < 7; i++) {
+        if (!(dayStatus[i] === 'idle' || dayStatus[i] === 'holiday_off')) weeklyWorkedHours += dayTotals[i];
+      }
 
       if (weeklyWorkedHours > 40) {
         flsaHoursOver40 = weeklyWorkedHours - 40;
         const rrNumerator = (hourlyRate * weeklyWorkedHours) + (window._mpPrevailingTotal || 0);
         const regularRate = rrNumerator / weeklyWorkedHours;
 
-        let credits = 0;
-        let cumulative = 0;
+        let credits = 0; let cumulative = 0;
         const { agreement } = getSelectedOT();
         const golden = !!document.getElementById('goldenHours')?.checked;
 
         for (let i = 0; i < 7; i++) {
+          const status = dayStatus[i];
           const dayTotal = dayTotals[i];
-          if (dayIsIdle[i] || dayTotal <= 0) { cumulative += Math.max(0, dayTotal); continue; }
+          if (status === 'idle' || status === 'holiday_off' || dayTotal <= 0) { cumulative += Math.max(0, dayTotal); continue; }
 
           const wn = workedNumbers[i];
           let segments = [];
-          if (wn === 6) {
+          if (status === 'holiday_worked') {
+            if (dayTotal > 0) segments.push({ dur: dayTotal, mult: 2 });
+          } else if (wn === 6) {
             const upTo12 = Math.min(dayTotal, 12);
             const over12 = Math.max(0, dayTotal - 12);
             if (upTo12 > 0) segments.push({ dur: upTo12, mult: 1.5 });
@@ -684,7 +709,7 @@
       }
     }
 
-    const totalAmount = regularAmount + ot15Amount + ot2xAmount + ot25Amount + ot3Amount + idleAmount + mealPenaltyAmount + sixthDayAmount + seventhDayAmount + flsaAmount + kitRental;
+    const totalAmount = regularAmount + ot15Amount + ot2xAmount + ot25Amount + ot3Amount + idleAmount + mealPenaltyAmount + sixthDayAmount + seventhDayAmount + holidayOffAmount + holidayWorkedAmount + (includeFLSA ? flsaAmount : 0) + kitRental;
 
     document.getElementById('totalHours').textContent = totalHours.toFixed(1);
     document.getElementById('regularHoursTotal').textContent = totalRegular.toFixed(1);
@@ -707,12 +732,19 @@
 
     const kitAmt = document.getElementById('kitAmount'); if (kitAmt) kitAmt.textContent = `$${kitRental.toFixed(2)}`;
 
+    const hOff = document.getElementById('holidayOffAmount'); if (hOff) hOff.textContent = `$${holidayOffAmount.toFixed(2)}`;
+    const hOffH = document.getElementById('holidayOffHours'); if (hOffH) hOffH.textContent = '';
+    const hWkdH = document.getElementById('holidayWorkedHours'); if (hWkdH) hWkdH.textContent = holidayWorkedHours ? holidayWorkedHours.toFixed(1) : '';
+    const hWkd = document.getElementById('holidayWorkedAmount'); if (hWkd) hWkd.textContent = `$${holidayWorkedAmount.toFixed(2)}`;
+
     setRowVisibility('row-regular', regularAmount, true);
     setRowVisibility('row-ot15', ot15Amount);
     setRowVisibility('row-ot2x', ot2xAmount);
     setRowVisibility('row-ot25', ot25Amount);
     setRowVisibility('row-ot3x', ot3Amount);
     setRowVisibility('row-idle', idleAmount);
+    setRowVisibility('row-holiday-off', holidayOffAmount);
+    setRowVisibility('row-holiday-worked', holidayWorkedAmount);
     setRowVisibility('row-meals', mealPenaltyAmount);
     setRowVisibility('row-sixth', sixthDayAmount);
     setRowVisibility('row-seventh', seventhDayAmount);
@@ -721,6 +753,19 @@
 
     const sdh = document.getElementById('sixthDayHours'); if (sdh) sdh.textContent = sixthDayPaidHours ? sixthDayPaidHours.toFixed(1) : '';
     const svh = document.getElementById('seventhDayHours'); if (svh) svh.textContent = seventhDayPaidHours ? seventhDayPaidHours.toFixed(1) : '';
+  }
+
+  function generateWeekDates(startDate) {
+    const dates = [];
+    const start = new Date(startDate);
+    start.setMinutes(start.getMinutes() + start.getTimezoneOffset());
+    for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); dates.push(d); }
+    return dates;
+  }
+  function formatDate(date) {
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   }
 
   function toggleHoursBreakdown() {
@@ -753,6 +798,6 @@
 
     recomputeAllDays();
   });
-</script>
+  </script>
 </body>
 </html>
