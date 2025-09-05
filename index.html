@@ -111,7 +111,7 @@
             <div>
               <label for="flsaTrueUp">FLSA OT</label>
               <div class="switch-row">
-                <input type="checkbox" id="flsaTrueUp" checked>
+                <input type="checkbox" id="flsaTrueUp">
                 <span class="hint">Adds weekly federal OT reconciliation</span>
               </div>
             </div>
@@ -648,7 +648,7 @@
     let flsaAmount = 0;
     let flsaHoursOver40 = 0;
     const flsaToggle = document.getElementById('flsaTrueUp');
-    const includeFLSA = flsaToggle ? flsaToggle.checked : true;
+    const includeFLSA = flsaToggle ? flsaToggle.checked : false;
 
     if (includeFLSA) {
       let weeklyWorkedHours = 0;
