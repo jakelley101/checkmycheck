@@ -50,6 +50,47 @@
     .switch-row{display:flex;align-items:center;gap:10px;padding-top:6px}
     .switch-row input[type="checkbox"]{width:18px;height:18px;accent-color:#007aff}
     .hint{font-size:13px;color:#6e6e73}
+
+    /* ---------------- Mobile-only tightening (desktop unchanged) ---------------- */
+    @media (max-width: 600px) {
+      body { padding: 12px; }
+      .container { padding: 16px; }
+
+      /* Inputs header row: two columns so it fits better on phones */
+      .form-row { grid-template-columns: 1fr 1fr; gap: 12px; }
+
+      .week-info { padding: 12px; }
+      .hours-breakdown { padding: 6px 10px; font-size: 13px; }
+
+      /* Timecard table: make Date + Status compact so Call is visible on load */
+      .table-container { margin: 8px 0; -webkit-overflow-scrolling: touch; }
+      table { min-width: 520px; table-layout: fixed; }
+      th, td { padding: 8px 6px; }
+      th { font-size: 13px; }
+
+      /* Date column */
+      .table-container table th:nth-child(1),
+      .table-container table td:nth-child(1) { width: 150px; }
+      .date-cell { font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+
+      /* Status column */
+      .table-container table th:nth-child(2),
+      .table-container table td:nth-child(2) { width: 92px; }
+      .status-select { max-width: 90px; padding: 4px 6px; }
+
+      /* Time inputs */
+      .time-input { width: 54px; padding: 4px; }
+
+      /* When Hours Breakdown is open, allow wider scroll but still compact */
+      table.expanded { min-width: 980px; }
+
+      /* Totals grid: keep three tight columns */
+      .totals-section { padding: 12px; }
+      .totals-table { width: 100%; max-width: none; font-size: 13px; }
+      .totals-table th, .totals-table td { padding: 8px 6px; }
+      .totals-table th:nth-child(2), .totals-table .hours-value { width: 56px; }
+      .totals-table th:nth-child(3), .totals-table .amount-value { width: 94px; }
+    }
   </style>
 </head>
 <body>
