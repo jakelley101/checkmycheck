@@ -301,27 +301,875 @@
     </div>
   </div>
 
-  <script>
-const IDLE_HOURS_PER_DAY=8;
-const OT_PROFILES={Basic:{bands:[{limit:8,mult:1},{limit:12,mult:1.5},{limit:1/0,mult:2}],goldenAfter:15,goldenMult:3},ASA:{bands:[{limit:8,mult:1},{limit:12,mult:1.5},{limit:1/0,mult:2}],goldenAfter:15,goldenMult:3},LBTA:{bands:[{limit:8,mult:1},{limit:12,mult:1.5},{limit:1/0,mult:2}],goldenAfter:15,goldenMult:3},CA:{bands:[{limit:8,mult:1},{limit:12,mult:1.5},{limit:1/0,mult:2}],goldenAfter:null,goldenMult:null},AICP:{bands:[{limit:8,mult:1},{limit:12,mult:1.5},{limit:15,mult:2},{limit:1/0,mult:2.5}],goldenAfter:null,goldenMult:null}};
-function sel(){return{agreement:(document.getElementById('agreement')?.value)||'Basic',golden:!!document.getElementById('goldenHours')?.checked}}
-function applyG(b,p,g){if(!g||!p.goldenAfter||p===OT_PROFILES.AICP)return b;const r=[];for(const x of b){if(x.limit<=p.goldenAfter){r.push({...x});}else{r.push({limit:p.goldenAfter,mult:x.mult},{limit:1/0,mult:p.goldenMult});return r;}}r.push({limit:1/0,mult:p.goldenMult});return r}
-function mult(h,a,g){const p=OT_PROFILES[a]||OT_PROFILES.Basic;const bands=applyG(p.bands,p,g);for(const x of bands){if(h<=x.limit)return x.mult}return bands[bands.length-1].mult}
-function buckets(t,a,g){const p=OT_PROFILES[a]||OT_PROFILES.Basic,bands=applyG(p.bands,p,g);let rem=t,prev=0;const b={regular:0,ot15:0,ot2:0,ot25:0,ot3:0};for(const x of bands){const span=Math.min(rem,Math.max(0,x.limit-prev));if(span>0){if(x.mult===1)b.regular+=span;else if(x.mult===1.5)b.ot15+=span;else if(x.mult===2)b.ot2+=span;else if(x.mult===2.5)b.ot25+=span;else if(x.mult===3)b.ot3+=span;rem-=span;prev=x.limit}if(rem<=0)break}if(rem>0){const m=bands[bands.length-1].mult;if(m===1)b.regular+=rem;else if(m===1.5)b.ot15+=rem;else if(m===2)b.ot2+=rem;else if(m===2.5)b.ot25+=rem;else if(m===3)b.ot3+=rem}return b}
-function dayStatus(i){return(document.getElementById('status'+i)?.value)||'none'}
-function eventMult(w,e,wn,ds){const {agreement:a,golden:g}=sel();const basis=(document.getElementById('otBasis')?.value)||'worked';const h=basis==='elapsed'?e:w;if(ds==='holiday_worked')return 2;if(wn===7)return 2;if(wn===6)return h<=12?1.5:2;return mult(h,a,g)}
-function mpRate(a,env,n){const map={'Basic_Studio':[8.5,11.5,13.5,25],'Basic_Location':[7.5,10,12.5,25],'ASA_Studio':[8.5,11,13.5,25],'ASA_Location':[7.5,10,12.5,25],'LBTA_Studio':[7.5,10,12.5,25],'LBTA_Location':[7.5,10,12.5,25]};const key=['Basic','ASA','LBTA'].includes(a)?a+'_'+env:'Basic_'+env;const r=map[key]||[7.5,10,12.5,25];if(n<=0)return 0;if(n===1)return r[0];if(n===2)return r[1];if(n<=4)return r[2];return r[3]}
-function rowVis(id,amt,always){const row=document.getElementById(id);if(!row)return;if(always){row.style.display='';return}row.style.display=amt>0.009?'':'none'}
-function setState(i){const s=dayStatus(i),row=document.getElementById('dayRow'+i),dis=(s==='idle'||s==='holiday_off');['call','lunchOut','lunchIn','wrap'].forEach(f=>{const el=document.getElementById(f+i);if(el)el.disabled=dis});if(row)row.classList.toggle('idle-row',dis)}
-function genDates(start){const out=[],d=new Date(start);d.setMinutes(d.getMinutes()+d.getTimezoneOffset());for(let i=0;i<7;i++){const x=new Date(d);x.setDate(d.getDate()+i);out.push(x)}return out}
-function fmt(d){return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})}
-function init(){const dates=genDates(document.getElementById('weekStart').value),tbody=document.getElementById('timecardTable');tbody.innerHTML='';dates.forEach((date,i)=>{const tr=document.createElement('tr');tr.id='dayRow'+i;tr.innerHTML=`<td class='date-cell'>${fmt(date)}</td><td><select id='status${i}' class='status-select'><option value='none' selected>—</option><option value='idle'>Idle</option><option value='grace'>Grace Used</option><option value='holiday_off'>Paid Holiday - Off</option><option value='holiday_worked'>Holiday - Worked (2x)</option></select></td><td><input type='number' class='time-input' id='call${i}' step='0.1' placeholder='0.0'></td><td><input type='number' class='time-input' id='lunchOut${i}' step='0.1' placeholder='0.0'></td><td><input type='number' class='time-input' id='lunchIn${i}' step='0.1' placeholder='0.0'></td><td><input type='number' class='time-input' id='wrap${i}' step='0.1' placeholder='0.0'></td><td class='calculated-cell breakdown-column hidden-column' id='totalHours${i}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='regular${i}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='totalOT${i}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='ot15${i}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='ot2x${i}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='ot25${i}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='ot3x${i}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='amMP${i}'>0</td><td class='calculated-cell breakdown-column hidden-column' id='pmMP${i}'>0</td><td class='calculated-cell breakdown-column hidden-column' id='amMPAmount${i}'>$0.00</td><td class='calculated-cell breakdown-column hidden-column' id='pmMPAmount${i}'>$0.00</td>`;tbody.appendChild(tr);['call','lunchOut','lunchIn','wrap'].forEach(f=>document.getElementById(f+i).addEventListener('input',recompute));document.getElementById('status'+i).addEventListener('change',()=>{setState(i);recompute()});setState(i)})}
-function comp(i){const s=dayStatus(i),c=+document.getElementById('call'+i).value||0,lo=+document.getElementById('lunchOut'+i).value||0,li=+document.getElementById('lunchIn'+i).value||0,w=+document.getElementById('wrap'+i).value||0,non=(s==='idle'||s==='holiday_off');let tot=0,r=0,a15=0,a2=0,a25=0,a3=0,am=0,pm=0;if(c&&w&&!non){tot=w-c;if(lo&&li)tot-=li-lo;const {agreement:a,golden:g}=sel(),basis=(document.getElementById('otBasis')?.value)||'worked',elapsed=w-c,hrs=basis==='elapsed'?elapsed:tot,b=buckets(hrs,a,g);r=b.regular;a15=b.ot15;a2=b.ot2;a25=b.ot25;a3=b.ot3;if(lo&&li){if(lo-c>6)am=Math.ceil((lo-c-6)*2);if(w-li>6)pm=Math.ceil((w-li-6)*2)}else{if(w-c>6)am=Math.ceil((w-c-6)*2)}}document.getElementById('totalHours'+i).textContent=tot.toFixed(1);document.getElementById('regular'+i).textContent=r.toFixed(1);document.getElementById('totalOT'+i).textContent=(a15+a2+a25+a3).toFixed(1);document.getElementById('ot15'+i).textContent=a15.toFixed(1);document.getElementById('ot2x'+i).textContent=a2.toFixed(1);const c25=document.getElementById('ot25'+i);if(c25)c25.textContent=a25.toFixed(1);const c3=document.getElementById('ot3x'+i);if(c3)c3.textContent=a3.toFixed(1);document.getElementById('amMP'+i).textContent=am.toFixed(0);document.getElementById('pmMP'+i).textContent=pm.toFixed(0);return{status:s,call:c,lunchOut:lo,lunchIn:li,wrap:w,isNonWorked:non,totalHours:tot,regularHours:r,ot15Hours:a15,ot2xHours:a2,ot25Hours:a25,ot3xHours:a3,amMP:am,pmMP:pm}}
-function buildEvents(i,m,wn){const ev=[],{status:s,call:c,lunchOut:lo,lunchIn:li}=m;let {amMP:am,pmMP:pm}=m;if(s==='grace'){if(am>0)am--;else if(pm>0)pm--}for(let k=1;k<=am;k++){const t=c+6+.5*k,w=t-c,e=t-c,mult=eventMult(w,e,wn,s);ev.push({dayIndex:i,type:'AM',seq:k,time:t,worked:w,mult})}if(li&&lo){const pre=Math.max(0,lo-c);for(let k=1;k<=pm;k++){const t=li+6+.5*k,w=pre+(t-li),e=t-c,mult=eventMult(w,e,wn,s);ev.push({dayIndex:i,type:'PM',seq:k,time:t,worked:w,mult})}}return ev}
-function recompute(){const rate=+document.getElementById('hourlyRate').value||0,agr=document.getElementById('agreement').value,env=document.getElementById('environment').value;const mets=[],wnums=Array(7).fill(0);for(let i=0;i<7;i++){mets[i]=comp(i);document.getElementById('amMPAmount'+i).textContent='$0.00';document.getElementById('pmMPAmount'+i).textContent='$0.00'}let wc=0;for(let i=0;i<7;i++){const m=mets[i];if(m.totalHours>0&&!m.isNonWorked){wc++;wnums[i]=wc}}let events=[];for(let i=0;i<7;i++)events=events.concat(buildEvents(i,mets[i],wnums[i]));events.sort((a,b)=>a.dayIndex-b.dayIndex||a.time-b.time);let count=0,prevTot=0,amAmt=Array(7).fill(0),pmAmt=Array(7).fill(0);for(const e of events){count++;let add=0;if(count<=19)add=mpRate(agr,env,e.seq);else{add=rate*e.mult;prevTot+=add}if(e.type==='AM')amAmt[e.dayIndex]+=add;else pmAmt[e.dayIndex]+=add}for(let i=0;i<7;i++){document.getElementById('amMPAmount'+i).textContent='$'+amAmt[i].toFixed(2);document.getElementById('pmMPAmount'+i).textContent='$'+pmAmt[i].toFixed(2)}window._mpPrevailingTotal=prevTot;totals()}
-function totals(){const rate=+document.getElementById('hourlyRate').value||0,guar=+document.getElementById('guaranteedHours').value||8,kit=+document.getElementById('kitRental')?.value||0;let totH=0,reg=0,h15=0,h2=0,h25hrs=0,h3hrs=0,idleDays=0,mpCount=0,mpAmt=0,regPaid=0,non15=0,non2=0,non25=0,non3=0,d6Amt=0,d7Amt=0,d6H=0,d7H=0,hOffAmt=0,hOffCnt=0,hWkdAmt=0,hWkdH=0;const dTot=[],dReg=[],d15=[],d2=[],d25=[],d3=[],dStat=[];for(let i=0;i<7;i++){dTot[i]=+document.getElementById('totalHours'+i).textContent||0;dReg[i]=+document.getElementById('regular'+i).textContent||0;d15[i]=+document.getElementById('ot15'+i).textContent||0;d2[i]=+document.getElementById('ot2x'+i).textContent||0;d25[i]=+(document.getElementById('ot25'+i)?.textContent)||0;d3[i]=+(document.getElementById('ot3x'+i)?.textContent)||0;dStat[i]=dayStatus(i);const a=+document.getElementById('amMPAmount'+i).textContent.replace('$','')||0,p=+document.getElementById('pmMPAmount'+i).textContent.replace('$','')||0;mpAmt+=a+p}const wnums=Array(7).fill(0);let wc=0;for(let i=0;i<7;i++){if(dTot[i]>0&&!(dStat[i]==='idle'||dStat[i]==='holiday_off')){wc++;wnums[i]=wc}}for(let i=0;i<7;i++){const s=dStat[i],t=dTot[i],r=dReg[i],a15=d15[i],a2=d2[i],a25=d25[i],a3=d3[i];const am=+document.getElementById('amMP'+i).textContent||0,pm=+document.getElementById('pmMP'+i).textContent||0;totH+=t;mpCount+=am+pm;if(s==='idle'){idleDays++;continue}if(s==='holiday_off'){hOffCnt++;hOffAmt+=8*rate;continue}if(s==='holiday_worked'){hWkdH+=t;hWkdAmt+=t*rate*2;continue}const wn=wnums[i];if(wn===6){const paid=Math.max(8,t),up=Math.min(paid,12),over=Math.max(0,paid-12);d6Amt+=up*rate*1.5+over*rate*2;d6H+=paid}else if(wn===7){const paid=Math.max(8,t);d7Amt+=paid*rate*2;d7H+=paid}else{if(t>0){regPaid+=t<guar?guar:r}reg+=r;h15+=a15;h2+=a2;h25hrs+=a25;h3hrs+=a3;non15+=a15;non2+=a2;non25+=a25;non3+=a3}}const regAmt=regPaid*rate,ot15Amt=non15*rate*1.5,ot2Amt=non2*rate*2,ot25Amt=non25*rate*2.5,ot3Amt=non3*rate*3,idleAmt=idleDays*IDLE_HOURS_PER_DAY*(rate/2);let flsaAmt=0,flsaOver=0;const flsa=document.getElementById('flsaTrueUp');const includeFLSA=flsa?flsa.checked:false;if(includeFLSA){let worked=0;for(let i=0;i<7;i++){if(!(dStat[i]==='idle'||dStat[i]==='holiday_off'))worked+=dTot[i]}if(worked>40){flsaOver=worked-40;const rr=((rate*worked)+(window._mpPrevailingTotal||0))/worked;let credits=0,cum=0;const {agreement:a}=sel(),g=!!document.getElementById('goldenHours')?.checked;for(let i=0;i<7;i++){const s=dStat[i],t=dTot[i];if(s==='idle'||s==='holiday_off'||t<=0){cum+=Math.max(0,t);continue}const wn=wnums[i];let seg=[];if(s==='holiday_worked'){if(t>0)seg.push({dur:t,mult:2})}else if(wn===6){const up=Math.min(t,12),over=Math.max(0,t-12);if(up>0)seg.push({dur:up,mult:1.5});if(over>0)seg.push({dur:over,mult:2})}else if(wn===7){if(t>0)seg.push({dur:t,mult:2})}else{const b=buckets(t,a,g);if(b.regular)seg.push({dur:b.regular,mult:1});if(b.ot15)seg.push({dur:b.ot15,mult:1.5});if(b.ot2)seg.push({dur:b.ot2,mult:2});if(b.ot25)seg.push({dur:b.ot25,mult:2.5});if(b.ot3)seg.push({dur:b.ot3,mult:3})}const after=cum+t,over=Math.max(0,after-40);if(over>0){let take=Math.min(over,t);for(let s=seg.length-1;s>=0&&take>0;s--){const sg=seg[s],used=Math.min(take,sg.dur);if(sg.mult>1)credits+=(sg.mult-1)*rate*used;take-=used}}cum=after}const need=0.5*rr*flsaOver;flsaAmt=Math.max(0,need-credits)}}const total=regAmt+ot15Amt+ot2Amt+ot25Amt+ot3Amt+idleAmt+mpAmt+d6Amt+d7Amt+hOffAmt+hWkdAmt+(includeFLSA?flsaAmt:0)+kit;document.getElementById('totalHours').textContent=totH.toFixed(1);document.getElementById('regularHoursTotal').textContent=reg.toFixed(1);document.getElementById('overtimeHoursTotal').textContent=h15.toFixed(1);document.getElementById('doubleOvertimeHoursTotal').textContent=h2.toFixed(1);const h25El=document.getElementById('ot25HoursTotal');if(h25El)h25El.textContent=h25hrs.toFixed(1);const h3El=document.getElementById('ot3xHoursTotal');if(h3El)h3El.textContent=h3hrs.toFixed(1);document.getElementById('totalAmount').textContent='$'+total.toFixed(2);document.getElementById('regularAmount').textContent='$'+regAmt.toFixed(2);document.getElementById('overtimeAmount').textContent='$'+ot15Amt.toFixed(2);document.getElementById('doubleOvertimeAmount').textContent='$'+ot2Amt.toFixed(2);const ot25El=document.getElementById('ot25Amount');if(ot25El)ot25El.textContent='$'+ot25Amt.toFixed(2);const ot3El=document.getElementById('ot3xAmount');if(ot3El)ot3El.textContent='$'+ot3Amt.toFixed(2);document.getElementById('idleAmount').textContent='$'+idleAmt.toFixed(2);document.getElementById('mealPenaltiesAmount').textContent='$'+mpAmt.toFixed(2);const s6=document.getElementById('sixthDayAmount');if(s6)s6.textContent='$'+d6Amt.toFixed(2);const s7=document.getElementById('seventhDayAmount');if(s7)s7.textContent='$'+d7Amt.toFixed(2);const fl=document.getElementById('flsaAmount');if(fl)fl.textContent='$'+flsaAmt.toFixed(2);const kitEl=document.getElementById('kitAmount');if(kitEl)kitEl.textContent='$'+kit.toFixed(2);const ho=document.getElementById('holidayOffAmount');if(ho)ho.textContent='$'+hOffAmt.toFixed(2);const hoH=document.getElementById('holidayOffHours');if(hoH)hoH.textContent='';const hwH=document.getElementById('holidayWorkedHours');if(hwH)hwH.textContent=hWkdH?hWkdH.toFixed(1):'';const hw=document.getElementById('holidayWorkedAmount');if(hw)hw.textContent='$'+hWkdAmt.toFixed(2);rowVis('row-regular',regAmt,true);rowVis('row-ot15',ot15Amt);rowVis('row-ot2x',ot2Amt);rowVis('row-ot25',ot25Amt);rowVis('row-ot3x',ot3Amt);rowVis('row-idle',idleAmt);rowVis('row-holiday-off',hOffAmt);rowVis('row-holiday-worked',hWkdAmt);rowVis('row-meals',mpAmt);rowVis('row-sixth',d6Amt);rowVis('row-seventh',d7Amt);rowVis('row-flsa',flsaAmt);rowVis('row-kit',kit)}
-function toggleHoursBreakdown(){const cols=document.querySelectorAll('.breakdown-column'),btn=document.querySelector('.hours-breakdown'),txt=document.getElementById('breakdown-text'),icon=document.getElementById('breakdown-icon'),table=document.querySelector('table');cols.forEach(c=>c.classList.toggle('hidden-column'));btn.classList.toggle('expanded');table.classList.toggle('expanded');if(btn.classList.contains('expanded')){txt.textContent='Hide Hours Breakdown';icon.textContent='−'}else{txt.textContent='Show Hours Breakdown';icon.textContent='+'}}
-document.addEventListener('DOMContentLoaded',function(){init();document.getElementById('weekStart').addEventListener('change',()=>{init();recompute()});document.getElementById('agreement').addEventListener('change',recompute);document.getElementById('environment').addEventListener('change',recompute);document.getElementById('goldenHours').addEventListener('change',recompute);document.getElementById('otBasis').addEventListener('change',recompute);document.getElementById('hourlyRate').addEventListener('input',recompute);document.getElementById('guaranteedHours').addEventListener('input',totals);const flsa=document.getElementById('flsaTrueUp');if(flsa)flsa.addEventListener('change',totals);const kit=document.getElementById('kitRental');if(kit)kit.addEventListener('input',totals);recompute()});
-</script>
+    <script>
+    const IDLE_HOURS_PER_DAY = 8;
+    const DAYS_IN_WEEK = 7;
+    const OT_PROFILES = {
+      Basic: {
+        bands: [
+          { limit: 8, mult: 1 },
+          { limit: 12, mult: 1.5 },
+          { limit: Infinity, mult: 2 },
+        ],
+        goldenAfter: 15,
+        goldenMult: 3,
+      },
+      ASA: {
+        bands: [
+          { limit: 8, mult: 1 },
+          { limit: 12, mult: 1.5 },
+          { limit: Infinity, mult: 2 },
+        ],
+        goldenAfter: 15,
+        goldenMult: 3,
+      },
+      LBTA: {
+        bands: [
+          { limit: 8, mult: 1 },
+          { limit: 12, mult: 1.5 },
+          { limit: Infinity, mult: 2 },
+        ],
+        goldenAfter: 15,
+        goldenMult: 3,
+      },
+      CA: {
+        bands: [
+          { limit: 8, mult: 1 },
+          { limit: 12, mult: 1.5 },
+          { limit: Infinity, mult: 2 },
+        ],
+        goldenAfter: null,
+        goldenMult: null,
+      },
+      AICP: {
+        bands: [
+          { limit: 8, mult: 1 },
+          { limit: 12, mult: 1.5 },
+          { limit: 15, mult: 2 },
+          { limit: Infinity, mult: 2.5 },
+        ],
+        goldenAfter: null,
+        goldenMult: null,
+      },
+    };
+
+    const MP_RATE_MAP = {
+      Basic_Studio: [8.5, 11.5, 13.5, 25],
+      Basic_Location: [7.5, 10, 12.5, 25],
+      ASA_Studio: [8.5, 11, 13.5, 25],
+      ASA_Location: [7.5, 10, 12.5, 25],
+      LBTA_Studio: [7.5, 10, 12.5, 25],
+      LBTA_Location: [7.5, 10, 12.5, 25],
+    };
+
+    function sel() {
+      return {
+        agreement: document.getElementById('agreement')?.value || 'Basic',
+        golden: Boolean(document.getElementById('goldenHours')?.checked),
+      };
+    }
+
+    function applyG(bands, profile, goldenEnabled) {
+      if (!goldenEnabled || !profile.goldenAfter || profile === OT_PROFILES.AICP) {
+        return bands;
+      }
+
+      const adjusted = [];
+
+      for (const band of bands) {
+        if (band.limit <= profile.goldenAfter) {
+          adjusted.push({ ...band });
+          continue;
+        }
+
+        adjusted.push(
+          { limit: profile.goldenAfter, mult: band.mult },
+          { limit: Infinity, mult: profile.goldenMult }
+        );
+        return adjusted;
+      }
+
+      adjusted.push({ limit: Infinity, mult: profile.goldenMult });
+      return adjusted;
+    }
+
+    function mult(hours, agreement, goldenEnabled) {
+      const profile = OT_PROFILES[agreement] || OT_PROFILES.Basic;
+      const bands = applyG(profile.bands, profile, goldenEnabled);
+
+      for (const band of bands) {
+        if (hours <= band.limit) {
+          return band.mult;
+        }
+      }
+
+      return bands[bands.length - 1].mult;
+    }
+
+    function buckets(totalHours, agreement, goldenEnabled) {
+      const profile = OT_PROFILES[agreement] || OT_PROFILES.Basic;
+      const bands = applyG(profile.bands, profile, goldenEnabled);
+      let remaining = totalHours;
+      let previousLimit = 0;
+      const totals = { regular: 0, ot15: 0, ot2: 0, ot25: 0, ot3: 0 };
+
+      for (const band of bands) {
+        const span = Math.min(remaining, Math.max(0, band.limit - previousLimit));
+
+        if (span > 0) {
+          if (band.mult === 1) totals.regular += span;
+          else if (band.mult === 1.5) totals.ot15 += span;
+          else if (band.mult === 2) totals.ot2 += span;
+          else if (band.mult === 2.5) totals.ot25 += span;
+          else if (band.mult === 3) totals.ot3 += span;
+
+          remaining -= span;
+          previousLimit = band.limit;
+        }
+
+        if (remaining <= 0) {
+          break;
+        }
+      }
+
+      if (remaining > 0) {
+        const multiplier = bands[bands.length - 1].mult;
+        if (multiplier === 1) totals.regular += remaining;
+        else if (multiplier === 1.5) totals.ot15 += remaining;
+        else if (multiplier === 2) totals.ot2 += remaining;
+        else if (multiplier === 2.5) totals.ot25 += remaining;
+        else if (multiplier === 3) totals.ot3 += remaining;
+      }
+
+      return totals;
+    }
+
+    function dayStatus(index) {
+      return document.getElementById(`status${index}`)?.value || 'none';
+    }
+
+    function eventMult(workedHours, elapsedHours, workedNumber, status) {
+      const { agreement, golden } = sel();
+      const basis = document.getElementById('otBasis')?.value || 'worked';
+      const hours = basis === 'elapsed' ? elapsedHours : workedHours;
+
+      if (status === 'holiday_worked') {
+        return 2;
+      }
+      if (workedNumber === 7) {
+        return 2;
+      }
+      if (workedNumber === 6) {
+        return hours <= 12 ? 1.5 : 2;
+      }
+
+      return mult(hours, agreement, golden);
+    }
+
+    function mpRate(agreement, environment, count) {
+      const key = ['Basic', 'ASA', 'LBTA'].includes(agreement)
+        ? `${agreement}_${environment}`
+        : `Basic_${environment}`;
+      const schedule = MP_RATE_MAP[key] || [7.5, 10, 12.5, 25];
+
+      if (count <= 0) return 0;
+      if (count === 1) return schedule[0];
+      if (count === 2) return schedule[1];
+      if (count <= 4) return schedule[2];
+      return schedule[3];
+    }
+
+    function rowVis(id, amount, alwaysShow = false) {
+      const row = document.getElementById(id);
+      if (!row) return;
+
+      if (alwaysShow) {
+        row.style.display = '';
+        return;
+      }
+
+      row.style.display = amount > 0.009 ? '' : 'none';
+    }
+
+    function setState(index) {
+      const status = dayStatus(index);
+      const row = document.getElementById(`dayRow${index}`);
+      const disabled = status === 'idle' || status === 'holiday_off';
+
+      ['call', 'lunchOut', 'lunchIn', 'wrap'].forEach((prefix) => {
+        const input = document.getElementById(`${prefix}${index}`);
+        if (input) {
+          input.disabled = disabled;
+        }
+      });
+
+      if (row) {
+        row.classList.toggle('idle-row', disabled);
+      }
+    }
+
+    function genDates(start) {
+      const result = [];
+      const base = new Date(start);
+      base.setMinutes(base.getMinutes() + base.getTimezoneOffset());
+
+      for (let i = 0; i < DAYS_IN_WEEK; i += 1) {
+        const day = new Date(base);
+        day.setDate(base.getDate() + i);
+        result.push(day);
+      }
+
+      return result;
+    }
+
+    function fmt(date) {
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    }
+
+    function readInputNumber(id, fallback = 0) {
+      const input = document.getElementById(id);
+      if (!input) {
+        return fallback;
+      }
+
+      const value = parseFloat(input.value);
+      if (!Number.isFinite(value) || value === 0) {
+        return fallback;
+      }
+
+      return value;
+    }
+
+    function readHoursValue(prefix, index) {
+      const cell = document.getElementById(`${prefix}${index}`);
+      if (!cell) {
+        return 0;
+      }
+
+      const value = parseFloat(cell.textContent);
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    function readCurrencyValue(id) {
+      const cell = document.getElementById(id);
+      if (!cell) {
+        return 0;
+      }
+
+      const value = parseFloat(cell.textContent.replace('$', ''));
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    function setHoursText(id, hours) {
+      const cell = document.getElementById(id);
+      if (cell) {
+        cell.textContent = hours.toFixed(1);
+      }
+    }
+
+    function setCurrencyText(id, amount) {
+      const cell = document.getElementById(id);
+      if (cell) {
+        cell.textContent = `$${amount.toFixed(2)}`;
+      }
+    }
+
+    function isWorkedStatus(status) {
+      return status !== 'idle' && status !== 'holiday_off';
+    }
+
+    function init() {
+      const weekStart = document.getElementById('weekStart').value;
+      const dates = genDates(weekStart);
+      const tbody = document.getElementById('timecardTable');
+      tbody.innerHTML = '';
+
+      dates.forEach((date, index) => {
+        const row = document.createElement('tr');
+        row.id = `dayRow${index}`;
+        row.innerHTML = `<td class='date-cell'>${fmt(date)}</td><td><select id='status${index}' class='status-select'><option value='none' selected>—</option><option value='idle'>Idle</option><option value='grace'>Grace Used</option><option value='holiday_off'>Paid Holiday - Off</option><option value='holiday_worked'>Holiday - Worked (2x)</option></select></td><td><input type='number' class='time-input' id='call${index}' step='0.1' placeholder='0.0'></td><td><input type='number' class='time-input' id='lunchOut${index}' step='0.1' placeholder='0.0'></td><td><input type='number' class='time-input' id='lunchIn${index}' step='0.1' placeholder='0.0'></td><td><input type='number' class='time-input' id='wrap${index}' step='0.1' placeholder='0.0'></td><td class='calculated-cell breakdown-column hidden-column' id='totalHours${index}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='regular${index}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='totalOT${index}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='ot15${index}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='ot2x${index}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='ot25${index}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='ot3x${index}'>0.0</td><td class='calculated-cell breakdown-column hidden-column' id='amMP${index}'>0</td><td class='calculated-cell breakdown-column hidden-column' id='pmMP${index}'>0</td><td class='calculated-cell breakdown-column hidden-column' id='amMPAmount${index}'>$0.00</td><td class='calculated-cell breakdown-column hidden-column' id='pmMPAmount${index}'>$0.00</td>`;
+        tbody.appendChild(row);
+
+        ['call', 'lunchOut', 'lunchIn', 'wrap'].forEach((prefix) => {
+          document
+            .getElementById(`${prefix}${index}`)
+            .addEventListener('input', recompute);
+        });
+
+        document
+          .getElementById(`status${index}`)
+          .addEventListener('change', () => {
+            setState(index);
+            recompute();
+          });
+
+        setState(index);
+      });
+    }
+
+    function comp(index) {
+      const status = dayStatus(index);
+      const call = +document.getElementById(`call${index}`).value || 0;
+      const lunchOut = +document.getElementById(`lunchOut${index}`).value || 0;
+      const lunchIn = +document.getElementById(`lunchIn${index}`).value || 0;
+      const wrap = +document.getElementById(`wrap${index}`).value || 0;
+      const nonWorked = status === 'idle' || status === 'holiday_off';
+
+      let total = 0;
+      let regular = 0;
+      let ot15 = 0;
+      let ot2 = 0;
+      let ot25 = 0;
+      let ot3 = 0;
+      let amPenalty = 0;
+      let pmPenalty = 0;
+
+      if (call && wrap && !nonWorked) {
+        total = wrap - call;
+
+        if (lunchOut && lunchIn) {
+          total -= lunchIn - lunchOut;
+        }
+
+        const { agreement, golden } = sel();
+        const basis = document.getElementById('otBasis')?.value || 'worked';
+        const elapsed = wrap - call;
+        const hoursForBuckets = basis === 'elapsed' ? elapsed : total;
+        const bucketed = buckets(hoursForBuckets, agreement, golden);
+
+        regular = bucketed.regular;
+        ot15 = bucketed.ot15;
+        ot2 = bucketed.ot2;
+        ot25 = bucketed.ot25;
+        ot3 = bucketed.ot3;
+
+        if (lunchOut && lunchIn) {
+          if (lunchOut - call > 6) {
+            amPenalty = Math.ceil((lunchOut - call - 6) * 2);
+          }
+          if (wrap - lunchIn > 6) {
+            pmPenalty = Math.ceil((wrap - lunchIn - 6) * 2);
+          }
+        } else if (wrap - call > 6) {
+          amPenalty = Math.ceil((wrap - call - 6) * 2);
+        }
+      }
+
+      setHoursText(`totalHours${index}`, total);
+      setHoursText(`regular${index}`, regular);
+      setHoursText(`totalOT${index}`, ot15 + ot2 + ot25 + ot3);
+
+      const ot15Cell = document.getElementById(`ot15${index}`);
+      if (ot15Cell) {
+        ot15Cell.textContent = ot15.toFixed(1);
+      }
+
+      const ot2Cell = document.getElementById(`ot2x${index}`);
+      if (ot2Cell) {
+        ot2Cell.textContent = ot2.toFixed(1);
+      }
+
+      const ot25Cell = document.getElementById(`ot25${index}`);
+      if (ot25Cell) {
+        ot25Cell.textContent = ot25.toFixed(1);
+      }
+
+      const ot3Cell = document.getElementById(`ot3x${index}`);
+      if (ot3Cell) {
+        ot3Cell.textContent = ot3.toFixed(1);
+      }
+
+      const amCell = document.getElementById(`amMP${index}`);
+      if (amCell) {
+        amCell.textContent = amPenalty.toFixed(0);
+      }
+
+      const pmCell = document.getElementById(`pmMP${index}`);
+      if (pmCell) {
+        pmCell.textContent = pmPenalty.toFixed(0);
+      }
+
+      return {
+        status,
+        call,
+        lunchOut,
+        lunchIn,
+        wrap,
+        isNonWorked: nonWorked,
+        totalHours: total,
+        regularHours: regular,
+        ot15Hours: ot15,
+        ot2xHours: ot2,
+        ot25Hours: ot25,
+        ot3xHours: ot3,
+        amMP: amPenalty,
+        pmMP: pmPenalty,
+      };
+    }
+
+    function buildEvents(index, metrics, workedNumber) {
+      const events = [];
+      const { status, call, lunchOut, lunchIn } = metrics;
+      let { amMP: amCount, pmMP: pmCount } = metrics;
+
+      if (status === 'grace') {
+        if (amCount > 0) {
+          amCount -= 1;
+        } else if (pmCount > 0) {
+          pmCount -= 1;
+        }
+      }
+
+      for (let seq = 1; seq <= amCount; seq += 1) {
+        const time = call + 6 + 0.5 * seq;
+        const worked = time - call;
+        const elapsed = time - call;
+        const multiplier = eventMult(worked, elapsed, workedNumber, status);
+        events.push({
+          dayIndex: index,
+          type: 'AM',
+          seq,
+          time,
+          worked,
+          mult: multiplier,
+        });
+      }
+
+      if (lunchIn && lunchOut) {
+        const preLunch = Math.max(0, lunchOut - call);
+        for (let seq = 1; seq <= pmCount; seq += 1) {
+          const time = lunchIn + 6 + 0.5 * seq;
+          const worked = preLunch + (time - lunchIn);
+          const elapsed = time - call;
+          const multiplier = eventMult(worked, elapsed, workedNumber, status);
+          events.push({
+            dayIndex: index,
+            type: 'PM',
+            seq,
+            time,
+            worked,
+            mult: multiplier,
+          });
+        }
+      }
+
+      return events;
+    }
+
+    function recompute() {
+      const rate = readInputNumber('hourlyRate', 0);
+      const agreement = document.getElementById('agreement').value;
+      const environment = document.getElementById('environment').value;
+
+      const metrics = [];
+      const workedNumbers = Array(DAYS_IN_WEEK).fill(0);
+
+      for (let i = 0; i < DAYS_IN_WEEK; i += 1) {
+        metrics[i] = comp(i);
+        document.getElementById(`amMPAmount${i}`).textContent = '$0.00';
+        document.getElementById(`pmMPAmount${i}`).textContent = '$0.00';
+      }
+
+      let workedCount = 0;
+      for (let i = 0; i < DAYS_IN_WEEK; i += 1) {
+        const day = metrics[i];
+        if (day.totalHours > 0 && !day.isNonWorked) {
+          workedCount += 1;
+          workedNumbers[i] = workedCount;
+        }
+      }
+
+      let events = [];
+      for (let i = 0; i < DAYS_IN_WEEK; i += 1) {
+        events = events.concat(buildEvents(i, metrics[i], workedNumbers[i]));
+      }
+
+      events.sort((a, b) => a.dayIndex - b.dayIndex || a.time - b.time);
+
+      let count = 0;
+      let prevTotal = 0;
+      const amAmounts = Array(DAYS_IN_WEEK).fill(0);
+      const pmAmounts = Array(DAYS_IN_WEEK).fill(0);
+
+      for (const event of events) {
+        count += 1;
+        let amount = 0;
+
+        if (count <= 19) {
+          amount = mpRate(agreement, environment, event.seq);
+        } else {
+          amount = rate * event.mult;
+          prevTotal += amount;
+        }
+
+        if (event.type === 'AM') {
+          amAmounts[event.dayIndex] += amount;
+        } else {
+          pmAmounts[event.dayIndex] += amount;
+        }
+      }
+
+      for (let i = 0; i < DAYS_IN_WEEK; i += 1) {
+        document.getElementById(`amMPAmount${i}`).textContent = `$${amAmounts[i].toFixed(2)}`;
+        document.getElementById(`pmMPAmount${i}`).textContent = `$${pmAmounts[i].toFixed(2)}`;
+      }
+
+      window._mpPrevailingTotal = prevTotal;
+      totals();
+    }
+
+    function totals() {
+      const rate = readInputNumber('hourlyRate', 0);
+      const guaranteedHours = readInputNumber('guaranteedHours', 8);
+      const kitRental = readInputNumber('kitRental', 0);
+
+      const days = Array.from({ length: DAYS_IN_WEEK }, (_, index) => ({
+        index,
+        total: readHoursValue('totalHours', index),
+        regular: readHoursValue('regular', index),
+        ot15: readHoursValue('ot15', index),
+        ot2: readHoursValue('ot2x', index),
+        ot25: readHoursValue('ot25', index),
+        ot3: readHoursValue('ot3x', index),
+        status: dayStatus(index),
+        amCount: readHoursValue('amMP', index),
+        pmCount: readHoursValue('pmMP', index),
+        amAmount: readCurrencyValue(`amMPAmount${index}`),
+        pmAmount: readCurrencyValue(`pmMPAmount${index}`),
+      }));
+
+      const mealPenaltyAmount = days.reduce(
+        (sum, day) => sum + day.amAmount + day.pmAmount,
+        0
+      );
+
+      const workedDayNumbers = [];
+      let workedDayCount = 0;
+      days.forEach((day, index) => {
+        if (day.total > 0 && isWorkedStatus(day.status)) {
+          workedDayCount += 1;
+          workedDayNumbers[index] = workedDayCount;
+        } else {
+          workedDayNumbers[index] = 0;
+        }
+      });
+
+      let totalHours = 0;
+      let regularHours = 0;
+      let ot15Hours = 0;
+      let ot2Hours = 0;
+      let ot25Hours = 0;
+      let ot3Hours = 0;
+      let regPaidHours = 0;
+      let ot15PaidHours = 0;
+      let ot2PaidHours = 0;
+      let ot25PaidHours = 0;
+      let ot3PaidHours = 0;
+      let idleDays = 0;
+      let mealPenaltyCount = 0;
+      let sixthDayAmount = 0;
+      let seventhDayAmount = 0;
+      let holidayOffAmount = 0;
+      let holidayWorkedAmount = 0;
+      let holidayWorkedHours = 0;
+
+      days.forEach((day, index) => {
+        totalHours += day.total;
+        mealPenaltyCount += day.amCount + day.pmCount;
+
+        if (day.status === 'idle') {
+          idleDays += 1;
+          return;
+        }
+
+        if (day.status === 'holiday_off') {
+          holidayOffAmount += 8 * rate;
+          return;
+        }
+
+        if (day.status === 'holiday_worked') {
+          holidayWorkedHours += day.total;
+          holidayWorkedAmount += day.total * rate * 2;
+          return;
+        }
+
+        const workedNumber = workedDayNumbers[index];
+
+        if (workedNumber === 6) {
+          const paid = Math.max(8, day.total);
+          const uptoTwelve = Math.min(paid, 12);
+          const beyondTwelve = Math.max(0, paid - 12);
+          sixthDayAmount += uptoTwelve * rate * 1.5 + beyondTwelve * rate * 2;
+          return;
+        }
+
+        if (workedNumber === 7) {
+          const paid = Math.max(8, day.total);
+          seventhDayAmount += paid * rate * 2;
+          return;
+        }
+
+        if (day.total > 0) {
+          regPaidHours += day.total < guaranteedHours ? guaranteedHours : day.regular;
+        }
+
+        regularHours += day.regular;
+        ot15Hours += day.ot15;
+        ot2Hours += day.ot2;
+        ot25Hours += day.ot25;
+        ot3Hours += day.ot3;
+
+        ot15PaidHours += day.ot15;
+        ot2PaidHours += day.ot2;
+        ot25PaidHours += day.ot25;
+        ot3PaidHours += day.ot3;
+      });
+
+      const regularAmount = regPaidHours * rate;
+      const ot15Amount = ot15PaidHours * rate * 1.5;
+      const ot2Amount = ot2PaidHours * rate * 2;
+      const ot25Amount = ot25PaidHours * rate * 2.5;
+      const ot3Amount = ot3PaidHours * rate * 3;
+      const idleAmount = idleDays * IDLE_HOURS_PER_DAY * (rate / 2);
+
+      let flsaAmount = 0;
+      let flsaOvertime = 0;
+      const includeFlsa = Boolean(document.getElementById('flsaTrueUp')?.checked);
+
+      if (includeFlsa) {
+        const workedHours = days.reduce(
+          (sum, day) => sum + (isWorkedStatus(day.status) ? day.total : 0),
+          0
+        );
+
+        if (workedHours > 40) {
+          flsaOvertime = workedHours - 40;
+          const baseRate =
+            ((rate * workedHours) + (window._mpPrevailingTotal || 0)) / workedHours;
+
+          let credits = 0;
+          let cumulative = 0;
+          const { agreement, golden } = sel();
+
+          days.forEach((day, index) => {
+            const { status, total } = day;
+            if (status === 'idle' || status === 'holiday_off' || total <= 0) {
+              cumulative += Math.max(0, total);
+              return;
+            }
+
+            const workedNumber = workedDayNumbers[index];
+            const segments = [];
+
+            if (status === 'holiday_worked') {
+              if (total > 0) {
+                segments.push({ duration: total, multiplier: 2 });
+              }
+            } else if (workedNumber === 6) {
+              const uptoTwelve = Math.min(total, 12);
+              const beyondTwelve = Math.max(0, total - 12);
+              if (uptoTwelve > 0) segments.push({ duration: uptoTwelve, multiplier: 1.5 });
+              if (beyondTwelve > 0) segments.push({ duration: beyondTwelve, multiplier: 2 });
+            } else if (workedNumber === 7) {
+              if (total > 0) {
+                segments.push({ duration: total, multiplier: 2 });
+              }
+            } else {
+              const bucketed = buckets(total, agreement, golden);
+              if (bucketed.regular) segments.push({ duration: bucketed.regular, multiplier: 1 });
+              if (bucketed.ot15) segments.push({ duration: bucketed.ot15, multiplier: 1.5 });
+              if (bucketed.ot2) segments.push({ duration: bucketed.ot2, multiplier: 2 });
+              if (bucketed.ot25) segments.push({ duration: bucketed.ot25, multiplier: 2.5 });
+              if (bucketed.ot3) segments.push({ duration: bucketed.ot3, multiplier: 3 });
+            }
+
+            const after = cumulative + total;
+            const overtime = Math.max(0, after - 40);
+
+            if (overtime > 0) {
+              let remaining = Math.min(overtime, total);
+
+              for (let segmentIndex = segments.length - 1; segmentIndex >= 0 && remaining > 0; segmentIndex -= 1) {
+                const segment = segments[segmentIndex];
+                const used = Math.min(remaining, segment.duration);
+
+                if (segment.multiplier > 1) {
+                  credits += (segment.multiplier - 1) * rate * used;
+                }
+
+                remaining -= used;
+              }
+            }
+
+            cumulative = after;
+          });
+
+          const target = 0.5 * baseRate * flsaOvertime;
+          flsaAmount = Math.max(0, target - credits);
+        }
+      }
+
+      const totalAmount =
+        regularAmount +
+        ot15Amount +
+        ot2Amount +
+        ot25Amount +
+        ot3Amount +
+        idleAmount +
+        mealPenaltyAmount +
+        sixthDayAmount +
+        seventhDayAmount +
+        holidayOffAmount +
+        holidayWorkedAmount +
+        (includeFlsa ? flsaAmount : 0) +
+        kitRental;
+
+      setHoursText('totalHours', totalHours);
+      setHoursText('regularHoursTotal', regularHours);
+      setHoursText('overtimeHoursTotal', ot15Hours);
+      setHoursText('doubleOvertimeHoursTotal', ot2Hours);
+
+      const ot25HoursCell = document.getElementById('ot25HoursTotal');
+      if (ot25HoursCell) {
+        ot25HoursCell.textContent = ot25Hours.toFixed(1);
+      }
+
+      const ot3HoursCell = document.getElementById('ot3xHoursTotal');
+      if (ot3HoursCell) {
+        ot3HoursCell.textContent = ot3Hours.toFixed(1);
+      }
+
+      setCurrencyText('totalAmount', totalAmount);
+      setCurrencyText('regularAmount', regularAmount);
+      setCurrencyText('overtimeAmount', ot15Amount);
+      setCurrencyText('doubleOvertimeAmount', ot2Amount);
+
+      const ot25AmountCell = document.getElementById('ot25Amount');
+      if (ot25AmountCell) {
+        ot25AmountCell.textContent = `$${ot25Amount.toFixed(2)}`;
+      }
+
+      const ot3AmountCell = document.getElementById('ot3xAmount');
+      if (ot3AmountCell) {
+        ot3AmountCell.textContent = `$${ot3Amount.toFixed(2)}`;
+      }
+
+      setCurrencyText('idleAmount', idleAmount);
+      setCurrencyText('mealPenaltiesAmount', mealPenaltyAmount);
+
+      const sixthDayAmountCell = document.getElementById('sixthDayAmount');
+      if (sixthDayAmountCell) {
+        sixthDayAmountCell.textContent = `$${sixthDayAmount.toFixed(2)}`;
+      }
+
+      const seventhDayAmountCell = document.getElementById('seventhDayAmount');
+      if (seventhDayAmountCell) {
+        seventhDayAmountCell.textContent = `$${seventhDayAmount.toFixed(2)}`;
+      }
+
+      const flsaAmountCell = document.getElementById('flsaAmount');
+      if (flsaAmountCell) {
+        flsaAmountCell.textContent = `$${flsaAmount.toFixed(2)}`;
+      }
+
+      const kitAmountCell = document.getElementById('kitAmount');
+      if (kitAmountCell) {
+        kitAmountCell.textContent = `$${kitRental.toFixed(2)}`;
+      }
+
+      const holidayOffAmountCell = document.getElementById('holidayOffAmount');
+      if (holidayOffAmountCell) {
+        holidayOffAmountCell.textContent = `$${holidayOffAmount.toFixed(2)}`;
+      }
+
+      const holidayOffHoursCell = document.getElementById('holidayOffHours');
+      if (holidayOffHoursCell) {
+        holidayOffHoursCell.textContent = '';
+      }
+
+      const holidayWorkedHoursCell = document.getElementById('holidayWorkedHours');
+      if (holidayWorkedHoursCell) {
+        holidayWorkedHoursCell.textContent = holidayWorkedHours ? holidayWorkedHours.toFixed(1) : '';
+      }
+
+      const holidayWorkedAmountCell = document.getElementById('holidayWorkedAmount');
+      if (holidayWorkedAmountCell) {
+        holidayWorkedAmountCell.textContent = `$${holidayWorkedAmount.toFixed(2)}`;
+      }
+
+      rowVis('row-regular', regularAmount, true);
+      rowVis('row-ot15', ot15Amount);
+      rowVis('row-ot2x', ot2Amount);
+      rowVis('row-ot25', ot25Amount);
+      rowVis('row-ot3x', ot3Amount);
+      rowVis('row-idle', idleAmount);
+      rowVis('row-holiday-off', holidayOffAmount);
+      rowVis('row-holiday-worked', holidayWorkedAmount);
+      rowVis('row-meals', mealPenaltyAmount);
+      rowVis('row-sixth', sixthDayAmount);
+      rowVis('row-seventh', seventhDayAmount);
+      rowVis('row-flsa', flsaAmount);
+      rowVis('row-kit', kitRental);
+    }
+
+    function toggleHoursBreakdown() {
+      const columns = document.querySelectorAll('.breakdown-column');
+      columns.forEach((column) => column.classList.toggle('hidden-column'));
+
+      const button = document.querySelector('.hours-breakdown');
+      if (!button) return;
+
+      const isExpanded = button.classList.toggle('expanded');
+
+      const text = document.getElementById('breakdown-text');
+      if (text) {
+        text.textContent = isExpanded ? 'Hide Hours Breakdown' : 'Show Hours Breakdown';
+      }
+
+      const icon = document.getElementById('breakdown-icon');
+      if (icon) {
+        icon.textContent = isExpanded ? '−' : '+';
+      }
+
+      const table = document.querySelector('.table-container table');
+      if (table) {
+        table.classList.toggle('expanded', isExpanded);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      init();
+
+      document.getElementById('weekStart').addEventListener('change', () => {
+        init();
+        recompute();
+      });
+
+      document.getElementById('agreement').addEventListener('change', recompute);
+      document.getElementById('environment').addEventListener('change', recompute);
+      document.getElementById('goldenHours').addEventListener('change', recompute);
+      document.getElementById('otBasis').addEventListener('change', recompute);
+      document.getElementById('hourlyRate').addEventListener('input', recompute);
+      document.getElementById('guaranteedHours').addEventListener('input', totals);
+
+      const flsa = document.getElementById('flsaTrueUp');
+      if (flsa) {
+        flsa.addEventListener('change', totals);
+      }
+
+      const kit = document.getElementById('kitRental');
+      if (kit) {
+        kit.addEventListener('input', totals);
+      }
+
+      recompute();
+    });
+  </script>
+
 </body>
 </html>
